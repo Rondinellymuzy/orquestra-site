@@ -1,0 +1,1792 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestão de Orquestra</title>
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Fraunces:opsz,wght@9..144,600;9..144,700&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #17211c;
+      --forest: #173f32;
+      --moss: #2e6952;
+      --paper: #f7f4ec;
+      --cream: #fffdf8;
+      --brass: #c9913c;
+      --muted: #6d766f;
+      --line: #ded9cc;
+      --danger: #b63b3b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "DM Sans", sans-serif; color: var(--ink); background: #f7f4ec; }
+    .app-shell { width: 100%; min-height: 100vh; background: #f7f4ec; }
+    .serif { font-family: "Fraunces", serif; }
+    .nav-item { transition: .2s ease; cursor: pointer; }
+    .nav-item.active, .nav-item:hover { background: rgba(255,255,255,.18) !important; color: #fff !important; }
+    .view { display: none; }
+    .view.active { display: block; animation: rise .3s ease both; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .tab-button.active { background: var(--forest) !important; color: white !important; border-color: var(--forest) !important; }
+    .report-period.active { background: var(--forest) !important; color: white !important; border-color: var(--forest) !important; }
+    .metric-card { box-shadow: 0 12px 30px rgba(31, 49, 39, .06); }
+    .ring {
+      width: 110px; height: 110px; border-radius: 999px;
+      display: grid; place-items: center;
+      background: conic-gradient(var(--ring-color, var(--moss)) calc(var(--percent) * 1%), #ece7dc 0);
+      position: relative;
+    }
+    .ring::after { content: ""; position: absolute; inset: 13px; border-radius: 50%; background: var(--cream); }
+    .ring > span { position: relative; z-index: 1; font-weight: 700; font-size: 18px; }
+    .scrollbar-soft::-webkit-scrollbar { width: 7px; height: 7px; }
+    .scrollbar-soft::-webkit-scrollbar-thumb { background: #cbc4b4; border-radius: 99px; }
+    .toast { transform: translateY(20px); opacity: 0; pointer-events: none; transition: .25s ease; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .attendance-card.selected { background: #e0f1e6; border-color: #5ea376; }
+    .attendance-card.selected .presence-dot { background: #2e8b57; }
+    .modal-backdrop { display: none; }
+    .modal-backdrop.open { display: flex; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 900px) {
+      .sidebar { position: static; width: 100%; }
+      .layout-grid { grid-template-columns: 1fr !important; }
+      .mobile-scroll { overflow-x: auto; }
+    }
+    @media print {
+      body * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area { position: absolute; inset: 0; width: 100%; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TELA DE LOGIN -->
+  <div id="login-screen" class="fixed inset-0 z-[100] flex items-center justify-center bg-[#173f32] p-4">
+    <div class="w-full max-w-md rounded-2xl bg-[#fffdf8] p-8 shadow-2xl border border-[#ded9cc]">
+      <div class="flex items-center gap-3 justify-center mb-6">
+        <div class="w-12 h-12 rounded-full bg-[#c9913c] text-[#173f32] flex items-center justify-center font-bold text-2xl">
+          ♫
+        </div>
+        <div>
+          <p class="text-xs uppercase tracking-[.18em] text-[#6d766f] font-semibold">Orquestra</p>
+          <h2 class="serif font-bold text-lg text-[#173f32]">Pr. João Batista</h2>
+        </div>
+      </div>
+      <h3 class="text-xl font-bold text-center text-[#17211c] mb-1">Acesso Restrito</h3>
+      <p class="text-xs text-center text-[#6d766f] mb-6">Informe seu e-mail e senha cadastrados no Supabase.</p>
+      
+      <form id="login-form" class="space-y-4" onsubmit="handleLogin(event)">
+        <div>
+          <label for="login-email" class="block text-xs font-semibold text-[#17211c] mb-1">E-mail</label>
+          <input id="login-email" type="email" required autocomplete="username" placeholder="seu-email@exemplo.com" class="w-full rounded-xl border border-[#ded9cc] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#2e6952]">
+        </div>
+        <div>
+          <label for="login-password" class="block text-xs font-semibold text-[#17211c] mb-1">Senha</label>
+          <input id="login-password" type="password" required autocomplete="current-password" placeholder="••••••••" class="w-full rounded-xl border border-[#ded9cc] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#2e6952]">
+        </div>
+        <button id="login-submit" type="submit" class="w-full rounded-xl bg-[#c9913c] py-3 text-sm font-bold text-[#173f32] hover:opacity-90 transition shadow">
+          Entrar no Sistema
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- APLICAÇÃO PRINCIPAL -->
+  <div id="main-app" class="app-shell hidden">
+    <div class="layout-grid grid grid-cols-[260px_1fr] min-h-screen">
+      
+      <!-- SIDEBAR -->
+      <aside class="sidebar bg-[#173f32] text-white p-5 flex flex-col justify-between">
+        <div>
+          <header class="mb-8">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-[#c9913c] text-[#173f32] flex items-center justify-center font-bold text-lg">
+                ♫
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-[.18em] text-[#d9e4dc] font-semibold">Orquestra</p>
+                <h1 class="serif font-semibold leading-tight text-white text-base">Pr. João Batista</h1>
+              </div>
+            </div>
+          </header>
+
+          <nav aria-label="Navegação principal" class="space-y-2">
+            <button type="button" class="nav-item active w-full text-left rounded-xl px-4 py-3 flex items-center gap-3 bg-white/10" onclick="switchView('dashboard')">
+              <span class="text-lg">📊</span>
+              <span class="font-semibold text-sm">Visão Geral</span>
+            </button>
+            <button type="button" class="nav-item w-full text-left rounded-xl px-4 py-3 flex items-center gap-3" onclick="switchView('inventory')">
+              <span class="text-lg">📦</span>
+              <span class="font-semibold text-sm">Inventário</span>
+            </button>
+            <button type="button" class="nav-item w-full text-left rounded-xl px-4 py-3 flex items-center gap-3" onclick="switchView('attendance')">
+              <span class="text-lg">📅</span>
+              <span class="font-semibold text-sm">Frequência</span>
+            </button>
+          </nav>
+        </div>
+        
+        <div class="mt-8 space-y-3">
+          <div class="rounded-2xl p-4 bg-[#245341]">
+            <div class="flex items-center gap-2 mb-1">
+              <span id="status-indicator" class="inline-block w-2.5 h-2.5 rounded-full bg-green-400"></span>
+              <p id="status-text" class="font-semibold text-sm text-white">Conectado</p>
+            </div>
+            <p class="text-xs text-[#d5e2db] leading-relaxed">Supabase Database</p>
+          </div>
+          <button type="button" onclick="handleLogout()" class="w-full text-left rounded-xl px-4 py-2.5 flex items-center gap-3 text-red-300 hover:bg-red-900/30 hover:text-red-100 transition text-sm font-semibold">
+            <span>🚪</span> Sair do App
+          </button>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main class="w-full p-5 md:p-8 overflow-y-auto">
+        <!-- 1. DASHBOARD -->
+        <section id="dashboard" class="view active">
+          <header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-7">
+            <div>
+              <p class="text-xs uppercase tracking-[.18em] text-[#857f73] font-semibold">Visão Geral</p>
+              <h2 class="serif text-3xl md:text-4xl font-semibold mt-2 text-[#17211c]">O pulso da sua orquestra</h2>
+            </div>
+            <p class="text-sm text-[#6d766f]">Patrimônio, empréstimos e conservação em um só lugar.</p>
+          </header>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <article class="metric-card rounded-2xl bg-[#173f32] text-white p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#c8ddd1] font-semibold">Patrimônio consolidado</p>
+              <p id="total-value" class="text-3xl font-bold mt-4">R$ 0,00</p>
+              <div class="mt-5 flex items-center gap-2 text-sm text-[#dbeae1]">
+                <span id="total-items">0 itens cadastrados</span>
+              </div>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Instrumentos</p>
+              <p id="instrument-count" class="text-3xl font-bold mt-4">0</p>
+              <p id="instrument-value" class="text-sm text-[#6d766f] mt-3">R$ 0,00</p>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Pastas de naipe</p>
+              <p id="folder-count" class="text-3xl font-bold mt-4">0</p>
+              <p id="folder-value" class="text-sm text-[#6d766f] mt-3">R$ 0,00</p>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Estantes</p>
+              <p id="stand-count" class="text-3xl font-bold mt-4">0</p>
+              <p id="stand-average" class="text-sm text-[#6d766f] mt-3">Média: R$ 0,00</p>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Músicos cadastrados</p>
+              <p id="musician-count" class="text-3xl font-bold mt-4">0</p>
+              <p id="musician-distribution" class="text-sm text-[#6d766f] mt-3">Por naipe: —</p>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Frequência</p>
+              <div class="grid grid-cols-2 gap-3 mt-4">
+                <div>
+                  <p class="text-xs text-[#6d766f] font-semibold">Mês em curso</p>
+                  <p id="attendance-month-percent" class="text-2xl font-bold mt-1">0%</p>
+                  <p id="attendance-month-events" class="text-xs text-[#6d766f] mt-1">0 eventos</p>
+                </div>
+                <div>
+                  <p class="text-xs text-[#6d766f] font-semibold">Ano em curso</p>
+                  <p id="attendance-year-percent" class="text-2xl font-bold mt-1">0%</p>
+                  <p id="attendance-year-events" class="text-xs text-[#6d766f] mt-1">0 eventos</p>
+                </div>
+              </div>
+            </article>
+          </div>
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-5 mt-5">
+            <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="serif text-xl font-semibold text-[#17211c]">Disponibilidade de instrumentos</h3>
+                  <p class="text-sm text-[#6d766f] mt-1">Compare itens emprestados e disponíveis.</p>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-6">
+                <div class="flex items-center gap-4">
+                  <div id="loan-ring" class="ring" style="--percent:0; --ring-color:#c9913c;">
+                    <span id="loan-percent">0%</span>
+                  </div>
+                  <div>
+                    <p class="font-semibold">Emprestados</p>
+                    <p id="loan-count" class="text-sm text-[#6d766f]">0 instrumentos</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-4">
+                  <div id="available-ring" class="ring" style="--percent:0; --ring-color:#2e6952;">
+                    <span id="available-percent">0%</span>
+                  </div>
+                  <div>
+                    <p class="font-semibold">Disponíveis</p>
+                    <p id="available-count" class="text-sm text-[#6d766f]">0 instrumentos</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-6">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="serif text-xl font-semibold text-[#17211c]">Estado das estantes</h3>
+                  <p class="text-sm text-[#6d766f] mt-1">Conservação do acervo de apoio.</p>
+                </div>
+              </div>
+              <div id="stand-conservation" class="grid grid-cols-2 gap-3 mt-6"></div>
+            </section>
+          </div>
+          <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-6 mt-5">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h3 class="serif text-xl font-semibold text-[#17211c]">Patrimônio por naipe</h3>
+                <p class="text-sm text-[#6d766f] mt-1">Distribuição do valor dos instrumentos por naipe.</p>
+              </div>
+            </div>
+            <div id="naipe-distribution" class="space-y-4"></div>
+          </section>
+        </section>
+
+        <!-- 2. INVENTÁRIO -->
+        <section id="inventory" class="view">
+          <header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-7">
+            <div>
+              <p class="text-xs uppercase tracking-[.18em] text-[#857f73] font-semibold">Módulo 2</p>
+              <h2 class="serif text-3xl md:text-4xl font-semibold mt-2 text-[#17211c]">Inventário da orquestra</h2>
+            </div>
+          </header>
+          <div class="mobile-scroll flex gap-2 pb-2 border-b border-[#ded9cc]">
+            <button type="button" class="tab-button active rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('inventory-tabs', 'instruments-panel', this)">Instrumentos</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('inventory-tabs', 'scores-panel', this)">Partituras</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('inventory-tabs', 'stands-inventory-panel', this)">Estantes</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('inventory-tabs', 'others-panel', this)">Outros</button>
+          </div>
+          
+          <div id="instruments-panel" class="tab-panel active pt-6">
+            <div class="grid grid-cols-1 xl:grid-cols-[1fr_330px] gap-5">
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 class="serif text-xl font-semibold text-[#17211c]">Instrumentos cadastrados</h3>
+                    <p class="text-sm text-[#6d766f] mt-1">Acompanhe fotos, valores, responsáveis e conservação.</p>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-2 min-w-[280px]">
+                    <div class="relative flex-1">
+                      <input id="instrument-search" type="search" oninput="renderInstruments()" class="w-full rounded-xl border border-[#d8d1c4] bg-white py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-[#2e6952]" placeholder="Buscar instrumento...">
+                    </div>
+                    <div>
+                      <select id="instrument-naipe-filter" onchange="renderInstruments()" class="w-full rounded-xl border border-[#d8d1c4] bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#2e6952]">
+                        <option value="">Todos os naipes</option>
+                        <option>Cordas</option>
+                        <option>Madeiras</option>
+                        <option>Metais</option>
+                        <option>Base</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="overflow-x-auto mt-5 scrollbar-soft">
+                  <table class="w-full text-sm text-left">
+                    <thead class="text-xs uppercase tracking-wide text-[#6d766f] border-b border-[#ded9cc]">
+                      <tr>
+                        <th class="pb-3 pr-3">Instrumento / Valor</th>
+                        <th class="pb-3 pr-3">Naipe</th>
+                        <th class="pb-3 pr-3">Conservação</th>
+                        <th class="pb-3 pr-3">Status</th>
+                        <th class="pb-3 pr-3">Guardião</th>
+                        <th class="pb-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="instrument-list"></tbody>
+                  </table>
+                </div>
+                <p id="instrument-empty" class="hidden text-center py-8 text-sm text-[#6d766f]">Nenhum instrumento encontrado.</p>
+              </section>
+
+              <!-- FORMULÁRIO DE INSTRUMENTO COM O CAMPO DE FOTO E VALOR -->
+              <aside class="rounded-2xl bg-[#173f32] text-white p-5 h-fit">
+                <h3 id="instrument-form-title" class="serif text-xl font-semibold">Novo instrumento</h3>
+                <form id="instrument-form" class="mt-5 space-y-3">
+                  <div>
+                    <label for="instrument-tag" class="text-xs text-[#dce9e2] font-semibold">Tag de identificação</label>
+                    <input id="instrument-tag" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="text">
+                  </div>
+                  <div>
+                    <label for="instrument-name" class="text-xs text-[#dce9e2] font-semibold">Nome do instrumento</label>
+                    <input id="instrument-name" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="text">
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label for="instrument-naipe" class="text-xs text-[#dce9e2] font-semibold">Naipe</label>
+                      <select id="instrument-naipe" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                        <option value="">Selecione</option>
+                        <option>Cordas</option>
+                        <option>Madeiras</option>
+                        <option>Metais</option>
+                        <option>Base</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="instrument-value-input" class="text-xs text-[#dce9e2] font-semibold">Valor (R$)</label>
+                      <input id="instrument-value-input" required min="0" step="0.01" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="number">
+                    </div>
+                  </div>
+
+                  <!-- CAMPO DE FOTO URL -->
+                  <div>
+                    <label for="instrument-photo" class="text-xs text-[#dce9e2] font-semibold">Link da foto (URL)</label>
+                    <input id="instrument-photo" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="url" placeholder="https://exemplo.com/foto.jpg">
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label for="instrument-status" class="text-xs text-[#dce9e2] font-semibold">Status</label>
+                      <select id="instrument-status" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                        <option>Disponível</option>
+                        <option>Emprestado</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="instrument-conservation" class="text-xs text-[#dce9e2] font-semibold">Conservação</label>
+                      <select id="instrument-conservation" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                        <option>Ótimo</option>
+                        <option>Bom</option>
+                        <option>Regular</option>
+                        <option>Necessita Reparo</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label for="instrument-guardian" class="text-xs text-[#dce9e2] font-semibold">Guardião / responsável</label>
+                    <select id="instrument-guardian" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                      <option value="">Sem guardião</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="instrument-loan-date" class="text-xs text-[#dce9e2] font-semibold">Data do empréstimo</label>
+                    <input id="instrument-loan-date" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="date">
+                  </div>
+                  <div>
+                    <label for="instrument-accessories" class="text-xs text-[#dce9e2] font-semibold">Acessórios</label>
+                    <input id="instrument-accessories" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="text">
+                  </div>
+                  <button id="instrument-submit" class="w-full rounded-lg py-2.5 mt-2 font-bold bg-[#c9913c] text-[#173f32]" type="submit">Adicionar instrumento</button>
+                </form>
+              </aside>
+            </div>
+          </div>
+
+          <div id="scores-panel" class="tab-panel pt-6">
+            <div class="mobile-scroll flex gap-2 pb-3">
+              <button type="button" class="tab-button active rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('score-tabs', 'folders-inner', this)">Pastas de Naipe</button>
+              <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('score-tabs', 'catalog-inner', this)">Catálogo de Partituras</button>
+            </div>
+            <div id="folders-inner" class="tab-panel active">
+              <div class="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
+                <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                  <h3 class="serif text-xl font-semibold text-[#17211c]">Pastas de naipe</h3>
+                  <div id="folder-list" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5"></div>
+                  <p id="folder-empty" class="hidden text-sm text-[#6d766f] py-6 text-center">Nenhuma pasta cadastrada.</p>
+                </section>
+                <aside class="rounded-2xl bg-[#173f32] text-white p-5 h-fit">
+                  <h3 id="folder-form-title" class="serif text-xl font-semibold">Nova pasta</h3>
+                  <form id="folder-form" class="space-y-3 mt-5">
+                    <div>
+                      <label for="folder-tag" class="text-xs text-[#dce9e2] font-semibold">Tag da pasta</label>
+                      <input id="folder-tag" required class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="text">
+                    </div>
+                    <div>
+                      <label for="folder-naipe" class="text-xs text-[#dce9e2] font-semibold">Naipe</label>
+                      <select id="folder-naipe" required class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm">
+                        <option value="">Selecione</option>
+                        <option>Cordas</option>
+                        <option>Madeiras</option>
+                        <option>Metais</option>
+                        <option>Base</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="folder-scores" class="text-xs text-[#dce9e2] font-semibold">Partituras do catálogo</label>
+                      <select id="folder-scores" multiple class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm min-h-[130px]"></select>
+                    </div>
+                    <button id="folder-submit" class="w-full rounded-lg py-2.5 font-bold bg-[#c9913c] text-[#173f32]" type="submit">Criar pasta</button>
+                  </form>
+                </aside>
+              </div>
+            </div>
+            <div id="catalog-inner" class="tab-panel">
+              <div class="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
+                <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                  <h3 class="serif text-xl font-semibold text-[#17211c]">Catálogo global</h3>
+                  <div id="score-list" class="mt-5 space-y-3"></div>
+                  <p id="score-empty" class="hidden text-sm text-[#6d766f] py-6 text-center">Nenhuma partitura cadastrada.</p>
+                </section>
+                <aside class="rounded-2xl bg-[#173f32] text-white p-5 h-fit">
+                  <h3 id="score-form-title" class="serif text-xl font-semibold">Nova partitura</h3>
+                  <form id="score-form" class="space-y-3 mt-5">
+                    <div>
+                      <label for="score-name" class="text-xs text-[#dce9e2] font-semibold">Título da partitura</label>
+                      <input id="score-name" required class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="text">
+                    </div>
+                    <div>
+                      <label for="score-value" class="text-xs text-[#dce9e2] font-semibold">Valor (R$)</label>
+                      <input id="score-value" required min="0" step="0.01" class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="number">
+                    </div>
+                    <button id="score-submit" class="w-full rounded-lg py-2.5 font-bold bg-[#c9913c] text-[#173f32]" type="submit">Adicionar ao catálogo</button>
+                  </form>
+                </aside>
+              </div>
+            </div>
+          </div>
+
+          <div id="stands-inventory-panel" class="tab-panel pt-6">
+            <div class="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <h3 class="serif text-xl font-semibold text-[#17211c]">Estantes cadastradas</h3>
+                <div id="stand-list" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5"></div>
+                <p id="stand-empty" class="hidden text-sm text-[#6d766f] py-6 text-center">Nenhuma estante cadastrada.</p>
+              </section>
+              <aside class="rounded-2xl bg-[#173f32] text-white p-5 h-fit">
+                <h3 id="stand-form-title" class="serif text-xl font-semibold">Nova estante</h3>
+                <form id="stand-form" class="space-y-3 mt-5">
+                  <div>
+                    <label for="stand-tag" class="text-xs text-[#dce9e2] font-semibold">Tag de identificação</label>
+                    <input id="stand-tag" required class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="text">
+                  </div>
+                  <div>
+                    <label for="stand-conservation" class="text-xs text-[#dce9e2] font-semibold">Conservação</label>
+                    <select id="stand-conservation" class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm">
+                      <option>Ótimo</option>
+                      <option>Bom</option>
+                      <option>Regular</option>
+                      <option>Necessita Reparo</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="stand-value" class="text-xs text-[#dce9e2] font-semibold">Valor (R$)</label>
+                    <input id="stand-value" required min="0" step="0.01" class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="number">
+                  </div>
+                  <button id="stand-submit" class="w-full rounded-lg py-2.5 font-bold bg-[#c9913c] text-[#173f32]" type="submit">Adicionar estante</button>
+                </form>
+              </aside>
+            </div>
+          </div>
+
+          <div id="others-panel" class="tab-panel pt-6">
+            <div class="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <h3 class="serif text-xl font-semibold text-[#17211c]">Outros itens cadastrados</h3>
+                <div id="other-list" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5"></div>
+                <p id="other-empty" class="hidden text-sm text-[#6d766f] py-6 text-center">Nenhum outro item cadastrado.</p>
+              </section>
+              <aside class="rounded-2xl bg-[#173f32] text-white p-5 h-fit">
+                <h3 class="serif text-xl font-semibold">Novo item</h3>
+                <form id="other-form" class="space-y-3 mt-5">
+                  <div>
+                    <label for="other-name" class="text-xs text-[#dce9e2] font-semibold">Nome do item</label>
+                    <input id="other-name" required class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="text">
+                  </div>
+                  <div>
+                    <label for="other-tag" class="text-xs text-[#dce9e2] font-semibold">Tag de identificação</label>
+                    <input id="other-tag" required class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="text">
+                  </div>
+                  <div>
+                    <label for="other-value" class="text-xs text-[#dce9e2] font-semibold">Valor (R$)</label>
+                    <input id="other-value" required min="0" step="0.01" class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="number">
+                  </div>
+                  <div>
+                    <label for="other-accessories" class="text-xs text-[#dce9e2] font-semibold">Observações</label>
+                    <input id="other-accessories" class="w-full mt-1 rounded-lg px-3 py-2 text-[#17211c] text-sm" type="text">
+                  </div>
+                  <button id="other-submit" class="w-full rounded-lg py-2.5 font-bold bg-[#c9913c] text-[#173f32]" type="submit">Adicionar item</button>
+                </form>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. FREQUÊNCIA -->
+        <section id="attendance" class="view">
+          <header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-7">
+            <div>
+              <p class="text-xs uppercase tracking-[.18em] text-[#857f73] font-semibold">Módulo 3</p>
+              <h2 class="serif text-3xl md:text-4xl font-semibold mt-2 text-[#17211c]">Frequência e ensaios</h2>
+            </div>
+          </header>
+          <div class="mobile-scroll flex gap-2 pb-2 border-b border-[#ded9cc]">
+            <button type="button" class="tab-button active rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('attendance-tabs', 'call-panel', this)">Chamada</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('attendance-tabs', 'reports-panel', this)">Relatórios por Período</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('attendance-tabs', 'musicians-panel', this)">Músicos</button>
+          </div>
+          
+          <div id="call-panel" class="tab-panel active pt-6">
+            <div class="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-5">
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <div class="flex items-center justify-between">
+                  <h3 class="serif text-xl font-semibold text-[#17211c]">Eventos</h3>
+                  <button type="button" onclick="el('event-form').classList.toggle('hidden')" class="rounded-lg bg-[#173f32] px-3 py-2 text-sm text-white font-semibold">Novo evento</button>
+                </div>
+                <form id="event-form" class="hidden mt-4 p-3 rounded-xl bg-[#f2eee4] space-y-3">
+                  <div>
+                    <label for="event-title-input" class="text-xs font-semibold text-[#17211c]">Título do evento</label>
+                    <input id="event-title-input" required class="w-full mt-1 rounded-lg border border-[#d8d1c4] px-3 py-2 text-sm" type="text">
+                  </div>
+                  <div>
+                    <label for="event-date-input" class="text-xs font-semibold text-[#17211c]">Data</label>
+                    <input id="event-date-input" required class="w-full mt-1 rounded-lg border border-[#d8d1c4] px-3 py-2 text-sm" type="date">
+                  </div>
+                  <div class="flex gap-2">
+                    <button type="submit" id="event-submit" class="flex-1 rounded-lg bg-[#2e6952] py-2 text-sm text-white font-semibold">Salvar</button>
+                    <button type="button" onclick="resetEventForm()" class="rounded-lg bg-white border border-[#d8d1c4] px-3 py-2 text-sm font-semibold text-[#17211c]">Cancelar</button>
+                  </div>
+                </form>
+                <div id="event-list" class="space-y-3 mt-5"></div>
+                <p id="event-empty" class="hidden text-center py-8 text-sm text-[#6d766f]">Nenhum evento cadastrado.</p>
+              </section>
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <div id="attendance-placeholder" class="py-16 text-center">
+                  <div class="text-3xl mb-2">📅</div>
+                  <h3 class="serif text-xl font-semibold mt-2 text-[#17211c]">Selecione um evento</h3>
+                  <p class="text-sm text-[#6d766f] mt-1">Escolha um evento na lista para iniciar a chamada.</p>
+                </div>
+                <div id="attendance-active" class="hidden">
+                  <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+                    <div>
+                      <p class="text-xs uppercase tracking-[.14em] text-[#6d766f]">Chamada em andamento</p>
+                      <h3 id="active-event-title" class="serif text-2xl font-semibold mt-1"></h3>
+                      <p id="active-event-date" class="text-sm text-[#6d766f] mt-1"></p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <div id="attendance-ring" class="ring" style="--percent:0; --ring-color:#2e6952;">
+                        <span id="attendance-percent">0%</span>
+                      </div>
+                      <div>
+                        <p id="attendance-present" class="font-bold">0 presentes</p>
+                        <p id="attendance-absent" class="text-sm text-[#6d766f]">0 ausentes</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="attendance-musicians" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-6"></div>
+                  <div class="flex justify-end mt-6">
+                    <button type="button" onclick="showDetails()" class="rounded-lg bg-[#173f32] px-4 py-2.5 text-sm font-semibold text-white">Ver detalhes do evento</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div id="reports-panel" class="tab-panel pt-6">
+            <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                <div>
+                  <h3 class="serif text-xl font-semibold text-[#17211c]">Relatórios de frequência</h3>
+                  <p class="text-sm text-[#6d766f] mt-1">Filtre o período e visualize a frequência sob diferentes perspectivas.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" class="report-period rounded-full border border-[#ded9cc] px-3 py-2 text-xs font-semibold active" onclick="setReportPeriod(30, this)">Último mês</button>
+                  <button type="button" class="report-period rounded-full border border-[#ded9cc] px-3 py-2 text-xs font-semibold" onclick="setReportPeriod(90, this)">Trimestre</button>
+                  <button type="button" class="report-period rounded-full border border-[#ded9cc] px-3 py-2 text-xs font-semibold" onclick="setReportPeriod(180, this)">Semestre</button>
+                  <button type="button" class="report-period rounded-full border border-[#ded9cc] px-3 py-2 text-xs font-semibold" onclick="setReportPeriod(365, this)">Anual</button>
+                  <button type="button" class="report-period rounded-full border border-[#ded9cc] px-3 py-2 text-xs font-semibold" onclick="setReportPeriod('all', this)">Tudo</button>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2 mt-5">
+                <button type="button" class="report-type tab-button active rounded-lg border border-[#ded9cc] px-3 py-2 text-sm" onclick="setReportType('complete', this)">Listagem Completa</button>
+                <button type="button" class="report-type tab-button rounded-lg border border-[#ded9cc] px-3 py-2 text-sm" onclick="setReportType('naipe', this)">Por Naipe</button>
+                <button type="button" class="report-type tab-button rounded-lg border border-[#ded9cc] px-3 py-2 text-sm" onclick="setReportType('musician', this)">Por Músico</button>
+              </div>
+              <div id="report-output" class="mt-6"></div>
+              <div class="flex flex-wrap gap-3 mt-6 pt-5 border-t border-[#ded9cc]">
+                <button type="button" id="copy-report" class="rounded-lg bg-[#e7e1d5] px-4 py-2.5 text-sm font-semibold text-[#17211c]">Copiar texto</button>
+                <button type="button" id="print-report" class="rounded-lg bg-[#173f32] px-4 py-2.5 text-sm font-semibold text-white">Imprimir / PDF</button>
+              </div>
+            </section>
+          </div>
+
+          <div id="musicians-panel" class="tab-panel pt-6">
+            <div class="grid grid-cols-1 xl:grid-cols-[1fr_330px] gap-5">
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <h3 class="serif text-xl font-semibold text-[#17211c]">Músicos cadastrados</h3>
+                <div id="musician-list" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5"></div>
+                <p id="musician-empty" class="hidden text-sm text-[#6d766f] py-6 text-center">Nenhum músico cadastrado.</p>
+              </section>
+              <aside class="rounded-2xl bg-[#173f32] text-white p-5 h-fit">
+                <h3 id="musician-form-title" class="serif text-xl font-semibold">Novo músico</h3>
+                <form id="musician-form" class="space-y-3 mt-5">
+                  <div>
+                    <label for="musician-name" class="text-xs text-[#dce9e2] font-semibold">Nome completo</label>
+                    <input id="musician-name" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="text">
+                  </div>
+                  <div>
+                    <label for="musician-instrument" class="text-xs text-[#dce9e2] font-semibold">Instrumento</label>
+                    <input id="musician-instrument" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="text">
+                  </div>
+                  <div>
+                    <label for="musician-naipe" class="text-xs text-[#dce9e2] font-semibold">Naipe</label>
+                    <select id="musician-naipe" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                      <option value="">Selecione</option>
+                      <option>Cordas</option>
+                      <option>Madeiras</option>
+                      <option>Metais</option>
+                      <option>Base</option>
+                    </select>
+                  </div>
+                  <button id="musician-submit" class="w-full rounded-lg py-2.5 font-bold bg-[#c9913c] text-[#173f32]" type="submit">Adicionar músico</button>
+                </form>
+              </aside>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- MODAL DE DETALHES -->
+  <div id="event-modal" class="modal-backdrop fixed inset-0 z-50 items-center justify-center bg-[#14271f]/65 p-4">
+    <div id="print-area" class="w-full max-w-4xl max-h-[90%] overflow-y-auto rounded-2xl bg-[#fffdf8] shadow-2xl">
+      <header class="sticky top-0 flex items-start justify-between border-b border-[#ded9cc] bg-[#fffdf8] p-5 z-10">
+        <div>
+          <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Detalhes do evento</p>
+          <h2 id="detail-event-title" class="serif text-2xl font-semibold mt-1"></h2>
+          <p id="detail-event-date" class="text-sm text-[#6d766f] mt-1"></p>
+        </div>
+        <button type="button" onclick="el('event-modal').classList.remove('open')" aria-label="Fechar detalhes" class="no-print rounded-lg p-2 hover:bg-[#f2eee4] text-lg font-bold">✕</button>
+      </header>
+      <div class="p-5">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="rounded-xl bg-[#f2eee4] p-4">
+            <p class="text-xs uppercase tracking-wide text-[#6d766f]">Presentes</p>
+            <p id="detail-present" class="text-2xl font-bold mt-2">0</p>
+          </div>
+          <div class="rounded-xl bg-[#f2eee4] p-4">
+            <p class="text-xs uppercase tracking-wide text-[#6d766f]">Ausentes</p>
+            <p id="detail-absent" class="text-2xl font-bold mt-2">0</p>
+          </div>
+          <div class="rounded-xl bg-[#f2eee4] p-4">
+            <p class="text-xs uppercase tracking-wide text-[#6d766f]">Total</p>
+            <p id="detail-total" class="text-2xl font-bold mt-2">0</p>
+          </div>
+          <div class="rounded-xl bg-[#f2eee4] p-4 flex items-center gap-3">
+            <div id="detail-ring" class="ring !w-14 !h-14" style="--percent:0; --ring-color:#2e6952;">
+              <span id="detail-percent">0%</span>
+            </div>
+            <p class="text-xs text-[#6d766f]">Frequência</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
+          <section>
+            <h3 class="serif text-lg font-semibold text-[#17211c]">Presentes</h3>
+            <div id="detail-present-list" class="mt-3 space-y-2"></div>
+          </section>
+          <section>
+            <h3 class="serif text-lg font-semibold text-[#17211c]">Ausentes</h3>
+            <div id="detail-absent-list" class="mt-3 space-y-2"></div>
+          </section>
+        </div>
+      </div>
+      <footer class="sticky bottom-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-[#ded9cc] bg-[#fffdf8] p-5">
+        <p id="detail-footer-summary" class="font-semibold"></p>
+        <button type="button" onclick="window.print()" class="no-print rounded-lg bg-[#173f32] px-4 py-2.5 text-sm font-semibold text-white">Imprimir / gerar PDF</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="toast" class="toast fixed bottom-5 right-5 z-[150] rounded-xl bg-[#173f32] px-4 py-3 text-sm text-white shadow-xl" role="status" aria-live="polite"></div>
+
+  <!-- SCRIPT API REST SUPABASE DIRETO -->
+  <script>
+    const SUPABASE_URL = "https://gwetuummkxempzththkp.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd3ZXR1dW1ta3hlbXB6dGh0aGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5ODE0MzksImV4cCI6MjEwMjU1NzQzOX0.VcxlWg9fu_aGEAJOqzJVb0LXvakXgK3bRyk3C6EQxok";
+
+    const state = {
+      records: [],
+      activeEventId: null,
+      reportDays: 30,
+      reportType: "complete",
+      pendingDeletes: new Set(),
+      editingFolderId: null,
+      editingInstrumentId: null,
+      editingStandId: null,
+      editingScoreId: null,
+      editingMusicianId: null,
+      editingEventId: null
+    };
+
+    const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+    const byType = type => (state.records || []).filter(r => r && r.type === type);
+    const clean = value => value || "";
+    const el = id => document.getElementById(id);
+
+    function toast(message) {
+      const node = el("toast");
+      if (node) {
+        node.textContent = message;
+        node.classList.add("show");
+        setTimeout(() => node.classList.remove("show"), 3500);
+      }
+    }
+
+    function setStatus(text, colorClass) {
+      const txt = el("status-text");
+      const ind = el("status-indicator");
+      if (txt) txt.textContent = text;
+      if (ind) ind.className = `inline-block w-2.5 h-2.5 rounded-full ${colorClass}`;
+    }
+
+    function fmtMoney(value) { return currency.format(Number(value || 0)); }
+    function fmtDate(value) {
+      if (!value) return "Sem data";
+      try {
+        const d = new Date(value + "T12:00:00");
+        return isNaN(d.getTime()) ? value : d.toLocaleDateString("pt-BR");
+      } catch (e) {
+        return value;
+      }
+    }
+
+    function badge(text, type) {
+      const color = type === "status"
+        ? (text === "Emprestado" ? "bg-[#fff0d6] text-[#8b5a13]" : "bg-[#dff0e5] text-[#17623a]")
+        : (text === "Necessita Reparo" ? "bg-[#f7dddd] text-[#9f3030]" : text === "Regular" ? "bg-[#fff0d6] text-[#8b5a13]" : "bg-[#e5f1ea] text-[#17623a]");
+      return `<span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${color}">${text || "—"}</span>`;
+    }
+
+    function recordBase(type) {
+      return { type, tag: "", name: "", naipe: "", conservation: "", status: "", guardian: "", loan_date: null, value: 0, accessories: "", foto_url: "", instrument: "", event_title: "", event_date: null, musician_id: "", present: false, scores: "", folder_naipe: "" };
+    }
+
+    // ==========================================
+    // AUTENTICAÇÃO REST
+    // ==========================================
+    function getAuthToken() {
+      return localStorage.getItem("orquestra_auth_token") || SUPABASE_ANON_KEY;
+    }
+
+    function getHeaders() {
+      const token = getAuthToken();
+      return {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+      };
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = el("login-email").value.trim();
+      const password = el("login-password").value;
+      const submitBtn = el("login-submit");
+
+      if (!email || !password) {
+        toast("Preencha o e-mail e a senha.");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Verificando...";
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+          method: "POST",
+          headers: {
+            "apikey": SUPABASE_ANON_KEY,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Entrar no Sistema";
+
+        if (!res.ok) {
+          const msg = data.error_description || data.msg || data.message || "E-mail ou senha incorretos.";
+          toast("Erro: " + msg);
+          return;
+        }
+
+        if (data.access_token) {
+          localStorage.setItem("orquestra_auth_token", data.access_token);
+          localStorage.setItem("orquestra_user_email", data.user?.email || email);
+          toast("Bem-vindo(a)!");
+          showMainApp();
+          await loadDataFromSupabase();
+        }
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Entrar no Sistema";
+        toast("Erro ao tentar autenticar. Verifique sua conexão.");
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem("orquestra_auth_token");
+      localStorage.removeItem("orquestra_user_email");
+      el("main-app").classList.add("hidden");
+      el("login-screen").classList.remove("hidden");
+      el("login-password").value = "";
+      toast("Você saiu do sistema.");
+    }
+
+    function checkExistingAuth() {
+      const token = localStorage.getItem("orquestra_auth_token");
+      if (token) {
+        showMainApp();
+        loadDataFromSupabase();
+      } else {
+        el("login-screen").classList.remove("hidden");
+        el("main-app").classList.add("hidden");
+      }
+    }
+
+    function showMainApp() {
+      el("login-screen").classList.add("hidden");
+      el("main-app").classList.remove("hidden");
+      renderAll();
+    }
+
+    // ==========================================
+    // NAVEGAÇÃO DE TELAS E ABAS
+    // ==========================================
+    function switchView(targetId) {
+      document.querySelectorAll(".nav-item").forEach(btn => btn.classList.remove("active", "bg-white/10"));
+      const activeBtn = document.querySelector(`[onclick="switchView('${targetId}')"]`);
+      if (activeBtn) activeBtn.classList.add("active", "bg-white/10");
+
+      document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+      const targetView = el(targetId);
+      if (targetView) targetView.classList.add("active");
+    }
+
+    function switchSubTab(groupName, targetPanelId, buttonElem) {
+      const parent = buttonElem.parentElement;
+      parent.querySelectorAll(".tab-button").forEach(b => b.classList.remove("active"));
+      buttonElem.classList.add("active");
+
+      const container = parent.parentElement;
+      container.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      const panel = el(targetPanelId);
+      if (panel) panel.classList.add("active");
+    }
+
+    function setReportPeriod(days, buttonElem) {
+      buttonElem.parentElement.querySelectorAll(".report-period").forEach(b => b.classList.remove("active"));
+      buttonElem.classList.add("active");
+      state.reportDays = days;
+      renderReports();
+    }
+
+    function setReportType(type, buttonElem) {
+      buttonElem.parentElement.querySelectorAll(".report-type").forEach(b => b.classList.remove("active"));
+      buttonElem.classList.add("active");
+      state.reportType = type;
+      renderReports();
+    }
+
+    // ==========================================
+    // REQUISIÇÕES REST (SUPABASE)
+    // ==========================================
+    async function loadDataFromSupabase() {
+      setStatus("Sincronizando...", "bg-yellow-400");
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados?select=*&order=id.asc`, {
+          headers: getHeaders()
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText);
+        }
+
+        const data = await res.json();
+        state.records = (data || []).map(r => ({
+          ...r,
+          __backendId: String(r.id),
+          value: Number(r.value || 0)
+        }));
+
+        setStatus("Conectado", "bg-green-400");
+        renderAll();
+      } catch (err) {
+        console.error("Erro REST Supabase:", err);
+        setStatus("Erro de Conexão", "bg-red-500");
+        toast("Erro ao carregar dados do Supabase.");
+      }
+    }
+
+    async function createRecord(record, button) {
+      if (button) {
+        button.disabled = true;
+        button.dataset.origText = button.textContent;
+        button.textContent = "Salvando...";
+      }
+
+      const payload = { ...record };
+      delete payload.__backendId;
+      delete payload.id;
+      delete payload.created_at;
+      if (!payload.loan_date) payload.loan_date = null;
+      if (!payload.event_date) payload.event_date = null;
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados`, {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify([payload])
+        });
+
+        if (button) {
+          button.disabled = false;
+          button.textContent = button.dataset.origText || "Salvar";
+        }
+
+        if (!res.ok) throw new Error(await res.text());
+
+        toast("Registro salvo!");
+        await loadDataFromSupabase();
+        return true;
+      } catch (err) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = button.dataset.origText || "Salvar";
+        }
+        toast("Erro ao salvar: " + err.message);
+        return false;
+      }
+    }
+
+    async function updateRecord(record, button) {
+      if (button) {
+        button.disabled = true;
+        button.dataset.origText = button.textContent;
+        button.textContent = "Salvando...";
+      }
+
+      const id = Number(record.id || record.__backendId);
+      const payload = { ...record };
+      delete payload.__backendId;
+      delete payload.id;
+      delete payload.created_at;
+      if (!payload.loan_date) payload.loan_date = null;
+      if (!payload.event_date) payload.event_date = null;
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados?id=eq.${id}`, {
+          method: "PATCH",
+          headers: getHeaders(),
+          body: JSON.stringify(payload)
+        });
+
+        if (button) {
+          button.disabled = false;
+          button.textContent = button.dataset.origText || "Salvar";
+        }
+
+        if (!res.ok) throw new Error(await res.text());
+
+        toast("Alterações salvas!");
+        await loadDataFromSupabase();
+        return true;
+      } catch (err) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = button.dataset.origText || "Salvar";
+        }
+        toast("Erro ao atualizar: " + err.message);
+        return false;
+      }
+    }
+
+    async function deleteRecord(id) {
+      const record = state.records.find(r => r.__backendId === String(id));
+      if (!record) return;
+
+      if (!state.pendingDeletes.has(String(id))) {
+        state.pendingDeletes.add(String(id));
+        renderAll();
+        toast("Clique novamente em Excluir para confirmar.");
+        return;
+      }
+      state.pendingDeletes.delete(String(id));
+
+      let idsToDelete = [Number(id)];
+      if (record.type === "event") {
+        const related = attendanceFor(String(id)).map(a => Number(a.__backendId));
+        idsToDelete = [...idsToDelete, ...related];
+      }
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados?id=in.(${idsToDelete.join(",")})`, {
+          method: "DELETE",
+          headers: getHeaders()
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+
+        if (state.activeEventId === String(id)) state.activeEventId = null;
+        toast(record.type === "event" ? "Evento removido." : "Registro removido.");
+        await loadDataFromSupabase();
+      } catch (err) {
+        toast("Erro ao excluir: " + err.message);
+      }
+    }
+
+    async function togglePresence(musicianId) {
+      const eventId = state.activeEventId;
+      if (!eventId) return;
+
+      const existing = attendanceFor(eventId).find(a => String(a.musician_id) === String(musicianId));
+      if (existing) {
+        await updateRecord({ ...existing, present: !existing.present }, null);
+      } else {
+        const record = recordBase("attendance");
+        record.tag = String(eventId);
+        record.musician_id = String(musicianId);
+        record.present = true;
+        await createRecord(record, null);
+      }
+    }
+
+    async function deleteMusician(id) {
+      const musician = state.records.find(r => r.__backendId === String(id));
+      if (!musician) return;
+
+      if (!state.pendingDeletes.has(String(id))) {
+        state.pendingDeletes.add(String(id));
+        renderMusicians();
+        toast("Clique novamente em Excluir para confirmar.");
+        return;
+      }
+      state.pendingDeletes.delete(String(id));
+
+      const related = byType("attendance").filter(a => String(a.musician_id) === String(id)).map(a => Number(a.__backendId));
+      const idsToDelete = [Number(id), ...related];
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados?id=in.(${idsToDelete.join(",")})`, {
+          method: "DELETE",
+          headers: getHeaders()
+        });
+        if (!res.ok) throw new Error(await res.text());
+        toast("Músico removido.");
+        await loadDataFromSupabase();
+      } catch (err) {
+        toast("Erro ao excluir músico: " + err.message);
+      }
+    }
+
+    // ==========================================
+    // RENDERIZAÇÃO
+    // ==========================================
+    function dashboard() {
+      const instruments = byType("instrument");
+      const stands = byType("stand");
+      const folders = byType("folder");
+      const scores = byType("score");
+      const others = byType("other");
+
+      const scoreMap = new Map(scores.map(s => [s.__backendId, Number(s.value || 0)]));
+      const folderValue = folder => clean(folder.scores).split(",").filter(Boolean).reduce((sum, id) => sum + (scoreMap.get(id) || 0), 0);
+
+      const instrumentValue = instruments.reduce((s, x) => s + Number(x.value || 0), 0);
+      const standValue = stands.reduce((s, x) => s + Number(x.value || 0), 0);
+      const foldersValue = folders.reduce((s, x) => s + folderValue(x), 0);
+      const otherValue = others.reduce((s, x) => s + Number(x.value || 0), 0);
+      const total = instrumentValue + standValue + foldersValue + otherValue;
+
+      if (el("total-value")) el("total-value").textContent = fmtMoney(total);
+      if (el("total-items")) el("total-items").textContent = `${instruments.length + stands.length + folders.length + others.length} itens cadastrados`;
+      if (el("instrument-count")) el("instrument-count").textContent = instruments.length;
+      if (el("instrument-value")) el("instrument-value").textContent = fmtMoney(instrumentValue);
+      if (el("folder-count")) el("folder-count").textContent = folders.length;
+      if (el("folder-value")) el("folder-value").textContent = fmtMoney(foldersValue);
+      if (el("stand-count")) el("stand-count").textContent = stands.length;
+      if (el("stand-average")) el("stand-average").textContent = `Média: ${fmtMoney(stands.length ? standValue / stands.length : 0)}`;
+
+      const musicians = byType("musician");
+      const musicianGroups = ["Cordas", "Madeiras", "Metais", "Base"].map(naipe => `${naipe}: ${musicians.filter(m => m.naipe === naipe).length}`);
+      const otherMusicians = musicians.filter(m => !["Cordas", "Madeiras", "Metais", "Base"].includes(m.naipe)).length;
+      if (el("musician-count")) el("musician-count").textContent = musicians.length;
+      if (el("musician-distribution")) el("musician-distribution").textContent = `Por naipe: ${musicianGroups.join(" · ")}${otherMusicians ? ` · Outros: ${otherMusicians}` : ""}`;
+
+      const now = new Date();
+      const monthEvents = byType("event").filter(event => {
+        if (!event.event_date) return false;
+        const date = new Date(`${event.event_date}T12:00:00`);
+        return !isNaN(date) && date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+      });
+      const yearEvents = byType("event").filter(event => {
+        if (!event.event_date) return false;
+        const date = new Date(`${event.event_date}T12:00:00`);
+        return !isNaN(date) && date.getFullYear() === now.getFullYear();
+      });
+
+      const participation = events => {
+        const totals = events.reduce((sum, event) => sum + attendanceMetrics(event.__backendId).total, 0);
+        const present = events.reduce((sum, event) => sum + attendanceMetrics(event.__backendId).present, 0);
+        return totals ? Math.round(present / totals * 100) : 0;
+      };
+
+      if (el("attendance-month-percent")) el("attendance-month-percent").textContent = `${participation(monthEvents)}%`;
+      if (el("attendance-month-events")) el("attendance-month-events").textContent = `${monthEvents.length} evento${monthEvents.length === 1 ? "" : "s"}`;
+      if (el("attendance-year-percent")) el("attendance-year-percent").textContent = `${participation(yearEvents)}%`;
+      if (el("attendance-year-events")) el("attendance-year-events").textContent = `${yearEvents.length} evento${yearEvents.length === 1 ? "" : "s"}`;
+
+      const loaned = instruments.filter(x => x.status === "Emprestado").length;
+      const available = instruments.length - loaned;
+      const lp = instruments.length ? Math.round(loaned / instruments.length * 100) : 0;
+      const ap = instruments.length ? 100 - lp : 0;
+      if (el("loan-ring")) el("loan-ring").style.setProperty("--percent", lp); 
+      if (el("loan-percent")) el("loan-percent").textContent = lp + "%"; 
+      if (el("loan-count")) el("loan-count").textContent = loaned + " instrumentos";
+      if (el("available-ring")) el("available-ring").style.setProperty("--percent", ap); 
+      if (el("available-percent")) el("available-percent").textContent = ap + "%"; 
+      if (el("available-count")) el("available-count").textContent = available + " instrumentos";
+
+      const conservation = ["Ótimo", "Bom", "Regular", "Necessita Reparo"];
+      if (el("stand-conservation")) {
+        el("stand-conservation").innerHTML = conservation.map((status, i) => {
+          const count = stands.filter(s => s.conservation === status).length;
+          const colors = ["#dff0e5", "#e9ece8", "#fff0d6", "#f7dddd"];
+          return `<div class="rounded-xl p-3" style="background:${colors[i]}"><p class="text-xs text-[#5e665f]">${status}</p><p class="text-xl font-bold mt-1">${count}</p></div>`;
+        }).join("");
+      }
+
+      const groups = {};
+      instruments.forEach(item => { groups[item.naipe || "Sem naipe"] = (groups[item.naipe || "Sem naipe"] || 0) + Number(item.value || 0); });
+      const max = Math.max(...Object.values(groups), 1);
+      if (el("naipe-distribution")) {
+        el("naipe-distribution").innerHTML = Object.keys(groups).length ? Object.entries(groups).map(([name, value]) => `
+          <div><div class="flex justify-between text-sm mb-2"><span class="font-semibold">${name}</span><span class="text-[#6d766f]">${fmtMoney(value)}</span></div><div class="h-2 rounded-full bg-[#ece7dc] overflow-hidden"><div class="h-full rounded-full bg-[#2e6952]" style="width:${Math.round(value/max*100)}%"></div></div></div>
+        `).join("") : `<p class="text-sm text-[#6d766f]">Cadastre instrumentos para visualizar a distribuição.</p>`;
+      }
+    }
+
+    function renderInstruments() {
+      const term = (el("instrument-search")?.value || "").toLowerCase().trim();
+      const naipeFilter = el("instrument-naipe-filter")?.value || "";
+      const data = byType("instrument").filter(item => [item.name,item.tag,item.guardian,item.naipe].join(" ").toLowerCase().includes(term) && (!naipeFilter || item.naipe === naipeFilter));
+      
+      if (el("instrument-list")) {
+        el("instrument-list").innerHTML = data.map(item => {
+          // Miniatura da foto ou placeholder
+          const photoHtml = item.foto_url 
+  ? `<a href="${item.foto_url}" target="_blank" title="Clique para ver a foto em tamanho real">
+       <img src="${item.foto_url}" alt="Foto" class="w-10 h-10 rounded-lg object-cover border border-[#ded9cc] flex-shrink-0 hover:opacity-80 transition">
+     </a>` 
+  : `<div class="w-10 h-10 rounded-lg bg-[#e4e0d6] text-[#857f73] flex items-center justify-center flex-shrink-0 border border-[#ded9cc] text-xs">📷</div>`;
+
+          return `<tr class="border-b border-[#eee9df]">
+            <td class="py-3 pr-3">
+              <div class="flex items-center gap-3">
+                ${photoHtml}
+                <div>
+                  <p class="font-semibold">${item.name || "—"}</p>
+                  <p class="text-xs text-[#6d766f]">${item.tag || ""} • <span class="font-bold text-[#173f32]">${fmtMoney(item.value)}</span></p>
+                </div>
+              </div>
+            </td>
+            <td class="py-3 pr-3">${item.naipe || "—"}</td>
+            <td class="py-3 pr-3">${badge(item.conservation,"conservation")}</td>
+            <td class="py-3 pr-3">${badge(item.status,"status")}</td>
+            <td class="py-3 pr-3">
+              <p>${item.guardian || "—"}</p>
+              <p class="text-xs text-[#6d766f]">${item.loan_date ? fmtDate(item.loan_date) : ""}</p>
+            </td>
+            <td class="py-3 text-right">
+              <div class="flex justify-end gap-2">
+                <button type="button" class="edit-instrument text-xs font-semibold text-[#c9913c]" data-edit-instrument="${item.__backendId}">Editar</button>
+                <button type="button" class="delete-record text-xs font-semibold text-[#a43d3d]" data-delete="${item.__backendId}">${state.pendingDeletes.has(item.__backendId) ? "Confirmar?" : "Excluir"}</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join("");
+      }
+      if (el("instrument-empty")) el("instrument-empty").classList.toggle("hidden", data.length > 0);
+    }
+
+    function renderScoresAndFolders() {
+      const scores = byType("score");
+      if (el("score-list")) {
+        el("score-list").innerHTML = scores.map(item => `<div class="flex items-center justify-between rounded-xl border border-[#e1dbcf] p-4"><div><p class="font-semibold">${item.name || "—"}</p><p class="text-sm text-[#6d766f]">${fmtMoney(item.value)}</p></div><div class="flex gap-2"><button type="button" class="edit-score text-xs font-semibold text-[#c9913c]" data-edit-score="${item.__backendId}">Editar</button><button type="button" class="delete-record text-xs font-semibold text-[#a43d3d]" data-delete="${item.__backendId}">${state.pendingDeletes.has(item.__backendId) ? "Confirmar?" : "Excluir"}</button></div></div>`).join("");
+      }
+      if (el("score-empty")) el("score-empty").classList.toggle("hidden", scores.length > 0);
+      if (el("folder-scores")) {
+        el("folder-scores").innerHTML = scores.map(item => `<option value="${item.__backendId}">${item.name} — ${fmtMoney(item.value)}</option>`).join("");
+      }
+
+      const scoreMap = new Map(scores.map(s => [s.__backendId, s]));
+      const folders = byType("folder");
+      if (el("folder-list")) {
+        el("folder-list").innerHTML = folders.map(item => {
+          const selected = clean(item.scores).split(",").filter(Boolean).map(id => scoreMap.get(id)).filter(Boolean);
+          const total = selected.reduce((sum, score) => sum + Number(score.value || 0), 0);
+          return `<article class="rounded-xl border border-[#e1dbcf] p-4"><div class="flex justify-between gap-3"><div><p class="font-semibold">${item.folder_naipe || item.naipe || "—"}</p><p class="text-xs text-[#6d766f]">${item.tag || ""}</p></div><div class="flex gap-2"><button type="button" class="edit-folder text-xs font-semibold text-[#c9913c]" data-edit-folder="${item.__backendId}">Editar</button><button type="button" class="delete-record text-xs font-semibold text-[#a43d3d]" data-delete="${item.__backendId}">${state.pendingDeletes.has(item.__backendId) ? "Confirmar?" : "Excluir"}</button></div></div><p class="mt-4 text-xs uppercase tracking-wide text-[#6d766f]">Partituras</p><p class="mt-1 text-sm">${selected.map(s=>s.name).join(", ") || "Nenhuma selecionada"}</p><p class="font-bold mt-4">${fmtMoney(total)}</p></article>`;
+        }).join("");
+      }
+      if (el("folder-empty")) el("folder-empty").classList.toggle("hidden", folders.length > 0);
+    }
+
+    function renderOthers() {
+      const items = byType("other");
+      if (el("other-list")) {
+        el("other-list").innerHTML = items.map(item => `<article class="rounded-xl border border-[#e1dbcf] p-4 flex items-start justify-between gap-4"><div><p class="font-semibold">${item.name || "—"}</p><p class="text-xs text-[#6d766f] mt-1">${item.tag || ""}</p><p class="text-sm text-[#6d766f] mt-3">${fmtMoney(item.value)}</p>${item.accessories ? `<p class="text-xs text-[#6d766f] mt-2">${item.accessories}</p>` : ""}</div><button type="button" class="delete-record text-xs font-semibold text-[#a43d3d]" data-delete="${item.__backendId}">${state.pendingDeletes.has(item.__backendId) ? "Confirmar?" : "Excluir"}</button></article>`).join("");
+      }
+      if (el("other-empty")) el("other-empty").classList.toggle("hidden", items.length > 0);
+    }
+
+    function renderStands() {
+      const stands = byType("stand");
+      if (el("stand-list")) {
+        el("stand-list").innerHTML = stands.map(item => `<article class="rounded-xl border border-[#e1dbcf] p-4 flex items-start justify-between gap-4"><div><p class="font-semibold">${item.tag || "Estante"}</p><div class="mt-2">${badge(item.conservation,"conservation")}</div><p class="text-sm text-[#6d766f] mt-3">${fmtMoney(item.value)}</p></div><div class="flex flex-col items-end gap-2"><button type="button" class="edit-stand text-xs font-semibold text-[#c9913c]" data-edit-stand="${item.__backendId}">Editar</button><button type="button" class="delete-record text-xs font-semibold text-[#a43d3d]" data-delete="${item.__backendId}">${state.pendingDeletes.has(item.__backendId) ? "Confirmar?" : "Excluir"}</button></div></article>`).join("");
+      }
+      if (el("stand-empty")) el("stand-empty").classList.toggle("hidden", stands.length > 0);
+    }
+
+    function attendanceFor(eventId) { return byType("attendance").filter(a => String(a.tag) === String(eventId)); }
+    function musiciansWithAttendance(eventId) {
+      const attendance = new Map(attendanceFor(eventId).map(a => [String(a.musician_id), a]));
+      return byType("musician")
+        .slice()
+        .sort((a, b) => (a.name || "").localeCompare(b.name || "", "pt-BR", { sensitivity: "base" }))
+        .map(m => ({ musician: m, attendance: attendance.get(String(m.__backendId)) }));
+    }
+    function attendanceMetrics(eventId) {
+      const rows = musiciansWithAttendance(eventId);
+      const present = rows.filter(r => r.attendance && r.attendance.present).length;
+      return { total: rows.length, present, absent: rows.length-present, percent: rows.length ? Math.round(present/rows.length*100) : 0 };
+    }
+
+    function renderEvents() {
+      const events = byType("event").sort((a,b) => (b.event_date || "").localeCompare(a.event_date || ""));
+      if (el("event-list")) {
+        el("event-list").innerHTML = events.map(ev => {
+          const m = attendanceMetrics(ev.__backendId);
+          return `<div class="w-full rounded-xl border ${state.activeEventId === ev.__backendId ? "border-[#2e6952] bg-[#e6f1eb]" : "border-[#e1dbcf] bg-white"} p-4 hover:border-[#2e6952]" data-event="${ev.__backendId}">
+            <button type="button" class="w-full text-left" data-event-select="${ev.__backendId}"><div class="flex justify-between gap-2"><div><p class="font-semibold">${ev.event_title || "Sem título"}</p><p class="text-xs text-[#6d766f] mt-1">${fmtDate(ev.event_date)}</p></div><span class="text-xs text-[#6d766f]">${m.percent}%</span></div>
+            <p class="text-xs text-[#6d766f] mt-3">${m.present} presentes · ${m.absent} ausentes</p><div class="h-1.5 bg-[#e4e0d6] rounded-full mt-2 overflow-hidden"><div class="h-full bg-[#2e6952]" style="width:${m.percent}%"></div></div></button>
+            <div class="flex gap-3 mt-3 pt-3 border-t border-[#e6e0d5]"><button type="button" class="edit-event text-xs font-semibold text-[#c9913c]" data-edit-event="${ev.__backendId}">Editar</button><button type="button" class="delete-record text-xs font-semibold text-[#a43d3d]" data-delete="${ev.__backendId}">${state.pendingDeletes.has(ev.__backendId) ? "Confirmar?" : "Excluir"}</button></div>
+          </div>`;
+        }).join("");
+      }
+      if (el("event-empty")) el("event-empty").classList.toggle("hidden", events.length > 0);
+      renderAttendanceWorkspace();
+      renderReports();
+    }
+
+    function renderAttendanceWorkspace() {
+      const event = byType("event").find(e => e.__backendId === state.activeEventId);
+      if (el("attendance-placeholder")) el("attendance-placeholder").classList.toggle("hidden", !!event);
+      if (el("attendance-active")) el("attendance-active").classList.toggle("hidden", !event);
+      if (!event) return;
+      const m = attendanceMetrics(event.__backendId);
+      if (el("active-event-title")) el("active-event-title").textContent = event.event_title;
+      if (el("active-event-date")) el("active-event-date").textContent = fmtDate(event.event_date);
+      if (el("attendance-percent")) el("attendance-percent").textContent = m.percent + "%";
+      if (el("attendance-ring")) el("attendance-ring").style.setProperty("--percent", m.percent);
+      if (el("attendance-present")) el("attendance-present").textContent = m.present + " presentes";
+      if (el("attendance-absent")) el("attendance-absent").textContent = m.absent + " ausentes";
+      if (el("attendance-musicians")) {
+        el("attendance-musicians").innerHTML = musiciansWithAttendance(event.__backendId).map(row => {
+          const present = row.attendance ? row.attendance.present : false;
+          return `<button type="button" class="attendance-card ${present ? "selected" : ""} flex items-center gap-3 rounded-xl border border-[#ded9cc] p-3 text-left transition" data-toggle-presence="${row.musician.__backendId}">
+            <span class="presence-dot h-3 w-3 rounded-full bg-[#d8d1c4]"></span><span><span class="block font-semibold text-sm">${row.musician.name}</span><span class="block text-xs text-[#6d766f]">${row.musician.instrument} · ${row.musician.naipe}</span></span>
+          </button>`;
+        }).join("");
+      }
+    }
+
+    function renderMusicians() {
+      const musicians = byType("musician").slice().sort((a, b) => (a.name || "").localeCompare(b.name || "", "pt-BR", { sensitivity: "base" }));
+      const guardianSelect = el("instrument-guardian");
+      if (guardianSelect) {
+        const currentGuardian = guardianSelect.value;
+        guardianSelect.innerHTML = "";
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = "Sem guardião";
+        guardianSelect.appendChild(emptyOption);
+        musicians.forEach(musician => {
+          const option = document.createElement("option");
+          option.value = musician.name;
+          option.textContent = `${musician.name} — ${musician.instrument || musician.naipe}`;
+          guardianSelect.appendChild(option);
+        });
+        guardianSelect.value = currentGuardian;
+      }
+      if (el("musician-list")) {
+        el("musician-list").innerHTML = musicians.map(item => `<article class="rounded-xl border border-[#e1dbcf] p-4 flex justify-between gap-3"><div><p class="font-semibold">${item.name || "—"}</p><p class="text-sm text-[#6d766f] mt-1">${item.instrument || "—"} · ${item.naipe || "—"}</p></div><div class="flex items-center gap-3"><button type="button" class="edit-musician text-xs font-semibold text-[#c9913c]" data-edit-musician="${item.__backendId}">Editar</button><button type="button" class="delete-musician text-xs font-semibold text-[#a43d3d]" data-musician-delete="${item.__backendId}">${state.pendingDeletes.has(item.__backendId) ? "Confirmar?" : "Excluir"}</button></div></article>`).join("");
+      }
+      if (el("musician-empty")) el("musician-empty").classList.toggle("hidden", musicians.length > 0);
+    }
+
+    function dateInRange(dateValue) {
+      if (state.reportDays === "all") return true;
+      if (!dateValue) return false;
+      try {
+        const then = new Date(dateValue + "T00:00:00");
+        const now = new Date();
+        const diff = (now - then) / 86400000;
+        return diff >= 0 && diff <= state.reportDays;
+      } catch (e) {
+        return true;
+      }
+    }
+
+    function reportData() {
+      return byType("event").filter(event => dateInRange(event.event_date)).sort((a,b) => (b.event_date || "").localeCompare(a.event_date || ""));
+    }
+
+    function buildReportText() {
+      const events = reportData();
+      let lines = ["RELATÓRIO DE FREQUÊNCIA — ORQUESTRA", ""];
+      if (state.reportType === "complete") {
+        lines.push("LISTAGEM COMPLETA");
+        events.forEach(event => { const m = attendanceMetrics(event.__backendId); lines.push(`${fmtDate(event.event_date)} — ${event.event_title}: ${m.present}/${m.total} presentes (${m.percent}%)`); });
+      } else if (state.reportType === "naipe") {
+        lines.push("FREQUÊNCIA POR NAIPE");
+        const musicians = byType("musician");
+        const groups = {};
+        musicians.forEach(m => {
+          const stats = events.reduce((a,event) => { const row = attendanceFor(event.__backendId).find(x=>String(x.musician_id)===String(m.__backendId)); a.total++; if(row && row.present) a.present++; return a; }, {total:0,present:0});
+          const key = m.naipe || "Sem naipe"; (groups[key] ||= []).push({m,stats});
+        });
+        Object.entries(groups).forEach(([n,items]) => { lines.push("", n.toUpperCase()); items.forEach(({m,stats}) => lines.push(`• ${m.name}: ${stats.total ? Math.round(stats.present/stats.total*100) : 0}% (${stats.present}/${stats.total})`)); });
+      } else {
+        lines.push("RANKING POR MÚSICO");
+        byType("musician").map(m => {
+          const stats = events.reduce((a,event) => { const row = attendanceFor(event.__backendId).find(x=>String(x.musician_id)===String(m.__backendId)); a.total++; if(row && row.present) a.present++; return a; }, {total:0,present:0});
+          return {m, stats, percent: stats.total ? Math.round(stats.present/stats.total*100) : 0};
+        }).sort((a,b)=>b.percent-a.percent).forEach(x => lines.push(`${x.m.name}: ${x.percent}% (${x.stats.present}/${x.stats.total})`));
+      }
+      return lines.join("\n");
+    }
+
+    function renderReports() {
+      const events = reportData();
+      const output = el("report-output");
+      if (!output) return;
+      if (state.reportType === "complete") {
+        output.innerHTML = events.length ? `<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="text-left text-xs uppercase text-[#6d766f] border-b border-[#ded9cc]"><tr><th class="pb-3">Evento</th><th class="pb-3">Data</th><th class="pb-3">Presença</th><th class="pb-3">%</th></tr></thead><tbody>${events.map(event => { const m=attendanceMetrics(event.__backendId); return `<tr class="border-b border-[#eee9df]"><td class="py-3 font-semibold">${event.event_title || "—"}</td><td class="py-3">${fmtDate(event.event_date)}</td><td class="py-3">${m.present}/${m.total}</td><td class="py-3">${m.percent}%</td></tr>`; }).join("")}</tbody></table></div>` : `<p class="text-sm text-[#6d766f] py-6 text-center">Nenhum evento no período selecionado.</p>`;
+      } else if (state.reportType === "naipe") {
+        const groups = {};
+        byType("musician").forEach(m => {
+          const stats = events.reduce((a,event)=> { const row=attendanceFor(event.__backendId).find(x=>String(x.musician_id)===String(m.__backendId)); a.total++; if(row&&row.present)a.present++; return a; }, {total:0,present:0});
+          (groups[m.naipe || "Sem naipe"] ||= []).push({m, stats});
+        });
+        output.innerHTML = Object.keys(groups).length ? Object.entries(groups).map(([naipe, items]) => `<section class="rounded-xl bg-[#f4f0e7] p-4 mb-3"><h4 class="font-bold">${naipe}</h4><div class="space-y-2 mt-3">${items.map(({m,stats})=>{const p=stats.total?Math.round(stats.present/stats.total*100):0;return `<div><div class="flex justify-between text-sm"><span>${m.name}</span><span>${p}%</span></div><div class="h-1.5 rounded-full bg-white mt-1 overflow-hidden"><div class="h-full bg-[#2e6952]" style="width:${p}%"></div></div></div>`}).join("")}</div></section>`).join("") : `<p class="text-sm text-[#6d766f] py-6 text-center">Cadastre músicos para gerar este relatório.</p>`;
+      } else {
+        const ranking = byType("musician").map(m => {
+          const stats = events.reduce((a,event)=> { const row=attendanceFor(event.__backendId).find(x=>String(x.musician_id)===String(m.__backendId)); a.total++; if(row&&row.present)a.present++; return a; }, {total:0,present:0});
+          return {m, stats, p:stats.total?Math.round(stats.present/stats.total*100):0};
+        }).sort((a,b)=>b.p-a.p);
+        output.innerHTML = ranking.length ? ranking.map((row,i)=>`<div class="flex items-center gap-4 py-3 border-b border-[#eee9df]"><span class="w-6 text-sm font-bold text-[#c9913c]">${i+1}</span><div class="flex-1"><div class="flex justify-between text-sm"><span class="font-semibold">${row.m.name}</span><span>${row.p}%</span></div><div class="h-2 rounded-full bg-[#ece7dc] mt-2 overflow-hidden"><div class="h-full bg-[#2e6952]" style="width:${row.p}%"></div></div></div></div>`).join("") : `<p class="text-sm text-[#6d766f] py-6 text-center">Cadastre músicos para gerar este ranking.</p>`;
+      }
+    }
+
+    function renderAll() {
+      dashboard(); renderInstruments(); renderScoresAndFolders(); renderStands(); renderOthers(); renderEvents(); renderMusicians();
+      if (window.lucide && window.lucide.createIcons) lucide.createIcons();
+    }
+
+    // ==========================================
+    // FORM RESETS & DETAILS
+    // ==========================================
+    function resetFolderForm() {
+      state.editingFolderId = null;
+      el("folder-form")?.reset();
+      if (el("folder-form-title")) el("folder-form-title").textContent = "Nova pasta";
+      if (el("folder-submit")) el("folder-submit").textContent = "Criar pasta";
+      el("cancel-folder-edit")?.remove();
+    }
+
+    function resetInstrumentForm() {
+      state.editingInstrumentId = null;
+      el("instrument-form")?.reset();
+      if (el("instrument-form-title")) el("instrument-form-title").textContent = "Novo instrumento";
+      if (el("instrument-submit")) el("instrument-submit").textContent = "Adicionar instrumento";
+      el("cancel-instrument-edit")?.remove();
+    }
+
+    function resetStandForm() {
+      state.editingStandId = null;
+      el("stand-form")?.reset();
+      if (el("stand-form-title")) el("stand-form-title").textContent = "Nova estante";
+      if (el("stand-submit")) el("stand-submit").textContent = "Adicionar estante";
+      el("cancel-stand-edit")?.remove();
+    }
+
+    function resetScoreForm() {
+      state.editingScoreId = null;
+      el("score-form")?.reset();
+      if (el("score-form-title")) el("score-form-title").textContent = "Nova partitura";
+      if (el("score-submit")) el("score-submit").textContent = "Adicionar ao catálogo";
+      el("cancel-score-edit")?.remove();
+    }
+
+    function resetMusicianForm() {
+      state.editingMusicianId = null;
+      el("musician-form")?.reset();
+      if (el("musician-form-title")) el("musician-form-title").textContent = "Novo músico";
+      if (el("musician-submit")) el("musician-submit").textContent = "Adicionar músico";
+      el("cancel-musician-edit")?.remove();
+    }
+
+    function resetEventForm() {
+      state.editingEventId = null;
+      el("event-form")?.reset();
+      if (el("event-submit")) el("event-submit").textContent = "Salvar";
+      el("cancel-event-edit")?.remove();
+      el("event-form")?.classList.add("hidden");
+    }
+
+    function showDetails() {
+      const event = byType("event").find(e => e.__backendId === state.activeEventId);
+      if (!event) return;
+      const rows = musiciansWithAttendance(event.__backendId);
+      const m = attendanceMetrics(event.__backendId);
+      if (el("detail-event-title")) el("detail-event-title").textContent = event.event_title;
+      if (el("detail-event-date")) el("detail-event-date").textContent = fmtDate(event.event_date);
+      if (el("detail-present")) el("detail-present").textContent = m.present;
+      if (el("detail-absent")) el("detail-absent").textContent = m.absent;
+      if (el("detail-total")) el("detail-total").textContent = m.total;
+      if (el("detail-percent")) el("detail-percent").textContent = m.percent + "%";
+      if (el("detail-ring")) el("detail-ring").style.setProperty("--percent", m.percent);
+      const item = r => `<div class="rounded-lg border border-[#e6e0d5] bg-white px-3 py-2"><p class="font-semibold text-sm">${r.musician.name}</p><p class="text-xs text-[#6d766f]">${r.musician.instrument} · ${r.musician.naipe}</p></div>`;
+      if (el("detail-present-list")) el("detail-present-list").innerHTML = rows.filter(r => r.attendance && r.attendance.present).map(item).join("") || `<p class="text-sm text-[#6d766f]">Nenhum músico presente.</p>`;
+      if (el("detail-absent-list")) el("detail-absent-list").innerHTML = rows.filter(r => !(r.attendance && r.attendance.present)).map(item).join("") || `<p class="text-sm text-[#6d766f]">Nenhum músico ausente.</p>`;
+      if (el("detail-footer-summary")) el("detail-footer-summary").textContent = `${m.present} presentes de ${m.total} músicos — ${m.percent}% de frequência`;
+      el("event-modal")?.classList.add("open");
+    }
+
+    // ==========================================
+    // LISTENERS DE CLIQUE DINÂMICOS
+    // ==========================================
+    document.addEventListener("click", async event => {
+      const targetEvent = event.target.closest("[data-event-select]");
+      if (targetEvent) { state.activeEventId = targetEvent.dataset.eventSelect; renderEvents(); }
+
+      const editEventBtn = event.target.closest("[data-edit-event]");
+      if (editEventBtn) {
+        const eventRecord = state.records.find(r => r.__backendId === editEventBtn.dataset.editEvent);
+        if (eventRecord) {
+          state.editingEventId = eventRecord.__backendId;
+          el("event-title-input").value = eventRecord.event_title || "";
+          el("event-date-input").value = eventRecord.event_date || "";
+          el("event-form")?.classList.remove("hidden");
+          if (el("event-submit")) el("event-submit").textContent = "Salvar alterações";
+          if (!el("cancel-event-edit")) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.id = "cancel-event-edit"; cancelBtn.type = "button";
+            cancelBtn.className = "flex-1 rounded-lg bg-white border border-[#d8d1c4] px-3 py-2 text-sm";
+            cancelBtn.textContent = "Cancelar edição";
+            cancelBtn.addEventListener("click", resetEventForm);
+            el("event-form")?.querySelector(".flex")?.appendChild(cancelBtn);
+          }
+        }
+      }
+
+      const editInstrumentBtn = event.target.closest("[data-edit-instrument]");
+      if (editInstrumentBtn) {
+        const instId = editInstrumentBtn.dataset.editInstrument;
+        const inst = state.records.find(r => r.__backendId === instId);
+        if (inst) {
+          state.editingInstrumentId = instId;
+          el("instrument-tag").value = inst.tag || "";
+          el("instrument-name").value = inst.name || "";
+          el("instrument-naipe").value = inst.naipe || "";
+          el("instrument-value-input").value = inst.value || 0;
+          el("instrument-photo").value = inst.foto_url || ""; // Puxa foto
+          el("instrument-status").value = inst.status || "Disponível";
+          el("instrument-conservation").value = inst.conservation || "Ótimo";
+          el("instrument-guardian").value = inst.guardian || "";
+          el("instrument-loan-date").value = inst.loan_date || "";
+          el("instrument-accessories").value = inst.accessories || "";
+          
+          if (el("instrument-form-title")) el("instrument-form-title").textContent = "Editar instrumento";
+          if (el("instrument-submit")) el("instrument-submit").textContent = "Salvar Alterações";
+          
+          if (!el("cancel-instrument-edit")) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.id = "cancel-instrument-edit";
+            cancelBtn.type = "button";
+            cancelBtn.className = "w-full rounded-lg py-2 mt-2 font-bold bg-white text-[#173f32] border border-[#dce9e2]";
+            cancelBtn.textContent = "Cancelar Edição";
+            cancelBtn.addEventListener("click", resetInstrumentForm);
+            el("instrument-form")?.appendChild(cancelBtn);
+          }
+        }
+      }
+
+      const editStandBtn = event.target.closest("[data-edit-stand]");
+      if (editStandBtn) {
+        const standId = editStandBtn.dataset.editStand;
+        const stand = state.records.find(r => r.__backendId === standId);
+        if (stand) {
+          state.editingStandId = standId;
+          el("stand-tag").value = stand.tag || "";
+          el("stand-conservation").value = stand.conservation || "Ótimo";
+          el("stand-value").value = stand.value || 0;
+          
+          if (el("stand-form-title")) el("stand-form-title").textContent = "Editar estante";
+          if (el("stand-submit")) el("stand-submit").textContent = "Salvar Alterações";
+          
+          if (!el("cancel-stand-edit")) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.id = "cancel-stand-edit";
+            cancelBtn.type = "button";
+            cancelBtn.className = "w-full rounded-lg py-2 mt-2 font-bold bg-white text-[#173f32] border border-[#dce9e2]";
+            cancelBtn.textContent = "Cancelar Edição";
+            cancelBtn.addEventListener("click", resetStandForm);
+            el("stand-form")?.appendChild(cancelBtn);
+          }
+        }
+      }
+
+      const editScoreBtn = event.target.closest("[data-edit-score]");
+      if (editScoreBtn) {
+        const scoreId = editScoreBtn.dataset.editScore;
+        const score = state.records.find(r => r.__backendId === scoreId);
+        if (score) {
+          state.editingScoreId = scoreId;
+          el("score-name").value = score.name || "";
+          el("score-value").value = score.value || 0;
+          
+          if (el("score-form-title")) el("score-form-title").textContent = "Editar partitura";
+          if (el("score-submit")) el("score-submit").textContent = "Salvar Alterações";
+          
+          if (!el("cancel-score-edit")) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.id = "cancel-score-edit";
+            cancelBtn.type = "button";
+            cancelBtn.className = "w-full rounded-lg py-2 mt-2 font-bold bg-white text-[#173f32] border border-[#dce9e2]";
+            cancelBtn.textContent = "Cancelar Edição";
+            cancelBtn.addEventListener("click", resetScoreForm);
+            el("score-form")?.appendChild(cancelBtn);
+          }
+        }
+      }
+
+      const editMusicianBtn = event.target.closest("[data-edit-musician]");
+      if (editMusicianBtn) {
+        const musicianId = editMusicianBtn.dataset.editMusician;
+        const musician = state.records.find(r => r.__backendId === musicianId);
+        if (musician) {
+          state.editingMusicianId = musicianId;
+          el("musician-name").value = musician.name || "";
+          el("musician-instrument").value = musician.instrument || "";
+          el("musician-naipe").value = musician.naipe || "";
+          if (el("musician-form-title")) el("musician-form-title").textContent = "Editar músico";
+          if (el("musician-submit")) el("musician-submit").textContent = "Salvar alterações";
+          if (!el("cancel-musician-edit")) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.id = "cancel-musician-edit";
+            cancelBtn.type = "button";
+            cancelBtn.className = "w-full rounded-lg py-2 mt-2 font-bold bg-white text-[#173f32] border border-[#dce9e2]";
+            cancelBtn.textContent = "Cancelar edição";
+            cancelBtn.addEventListener("click", resetMusicianForm);
+            el("musician-form")?.appendChild(cancelBtn);
+          }
+        }
+      }
+
+      const editFolderBtn = event.target.closest("[data-edit-folder]");
+      if (editFolderBtn) {
+        const folderId = editFolderBtn.dataset.editFolder;
+        const folder = state.records.find(r => r.__backendId === folderId);
+        if (folder) {
+          state.editingFolderId = folderId;
+          el("folder-tag").value = folder.tag || "";
+          el("folder-naipe").value = folder.folder_naipe || folder.naipe || "";
+          
+          const selectedScores = clean(folder.scores).split(",");
+          Array.from(el("folder-scores")?.options || []).forEach(opt => {
+            opt.selected = selectedScores.includes(opt.value);
+          });
+          
+          if (el("folder-form-title")) el("folder-form-title").textContent = "Editar pasta";
+          if (el("folder-submit")) el("folder-submit").textContent = "Salvar Alterações";
+          
+          if (!el("cancel-folder-edit")) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.id = "cancel-folder-edit";
+            cancelBtn.type = "button";
+            cancelBtn.className = "w-full rounded-lg py-2 mt-2 font-bold bg-white text-[#173f32] border border-[#dce9e2]";
+            cancelBtn.textContent = "Cancelar Edição";
+            cancelBtn.addEventListener("click", resetFolderForm);
+            el("folder-form")?.appendChild(cancelBtn);
+          }
+        }
+      }
+
+      const toggle = event.target.closest("[data-toggle-presence]");
+      if (toggle) await togglePresence(toggle.dataset.togglePresence);
+
+      const remove = event.target.closest("[data-delete]");
+      if (remove) await deleteRecord(remove.dataset.delete);
+
+      const musicianRemove = event.target.closest("[data-musician-delete]");
+      if (musicianRemove) await deleteMusician(musicianRemove.dataset.musicianDelete);
+    });
+
+    el("copy-report")?.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(buildReportText()); toast("Relatório copiado para a área de transferência."); }
+      catch { toast("Não foi possível copiar o relatório neste navegador."); }
+    });
+    el("print-report")?.addEventListener("click", () => {
+      const content = `<pre style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.6">${buildReportText()}</pre>`;
+      const win = window.open("", "_blank");
+      if (!win) { toast("Permita pop-ups para imprimir o relatório."); return; }
+      win.document.write(`<html><head><title>Relatório da Orquestra</title></head><body>${content}<script>window.onload=function(){window.print()}<\/script></body></html>`);
+      win.document.close();
+    });
+
+    // ==========================================
+    // SUBMITS DOS FORMULÁRIOS
+    // ==========================================
+    el("instrument-form")?.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (state.editingInstrumentId) {
+        const inst = state.records.find(r => r.__backendId === state.editingInstrumentId);
+        if (inst) {
+          const updated = {
+            ...inst,
+            tag: el("instrument-tag").value.trim(),
+            name: el("instrument-name").value.trim(),
+            naipe: el("instrument-naipe").value.trim(),
+            value: Number(el("instrument-value-input").value),
+            foto_url: el("instrument-photo").value.trim(), // Salva foto na edição
+            status: el("instrument-status").value,
+            conservation: el("instrument-conservation").value,
+            guardian: el("instrument-guardian").value.trim(),
+            loan_date: el("instrument-loan-date").value,
+            accessories: el("instrument-accessories").value.trim()
+          };
+          if (await updateRecord(updated, el("instrument-submit"))) resetInstrumentForm();
+        }
+      } else {
+        const r = recordBase("instrument");
+        r.tag = el("instrument-tag").value.trim(); 
+        r.name = el("instrument-name").value.trim(); 
+        r.naipe = el("instrument-naipe").value.trim(); 
+        r.value = Number(el("instrument-value-input").value); 
+        r.foto_url = el("instrument-photo").value.trim(); // Salva foto na criação
+        r.status = el("instrument-status").value; 
+        r.conservation = el("instrument-conservation").value; 
+        r.guardian = el("instrument-guardian").value.trim(); 
+        r.loan_date = el("instrument-loan-date").value; 
+        r.accessories = el("instrument-accessories").value.trim();
+        if (await createRecord(r, el("instrument-submit"))) e.target.reset();
+      }
+    });
+
+    el("score-form")?.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (state.editingScoreId) {
+        const score = state.records.find(r => r.__backendId === state.editingScoreId);
+        if (score) {
+          const updated = {
+            ...score,
+            name: el("score-name").value.trim(),
+            value: Number(el("score-value").value)
+          };
+          if (await updateRecord(updated, el("score-submit"))) resetScoreForm();
+        }
+      } else {
+        const r=recordBase("score"); r.name=el("score-name").value.trim(); r.value=Number(el("score-value").value); 
+        if (await createRecord(r,el("score-submit"))) e.target.reset();
+      }
+    });
+
+    el("folder-form")?.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (state.editingFolderId) {
+        const folder = state.records.find(r => r.__backendId === state.editingFolderId);
+        if (folder) {
+          const updated = {
+            ...folder,
+            tag: el("folder-tag").value.trim(),
+            folder_naipe: el("folder-naipe").value.trim(),
+            naipe: el("folder-naipe").value.trim(),
+            scores: [...(el("folder-scores")?.selectedOptions || [])].map(o=>o.value).join(",")
+          };
+          if (await updateRecord(updated, el("folder-submit"))) resetFolderForm();
+        }
+      } else {
+        const r=recordBase("folder");
+        r.tag=el("folder-tag").value.trim();
+        r.folder_naipe=el("folder-naipe").value.trim();
+        r.naipe=r.folder_naipe;
+        r.scores=[...(el("folder-scores")?.selectedOptions || [])].map(o=>o.value).join(",");
+        if (await createRecord(r,el("folder-submit"))) e.target.reset();
+      }
+    });
+
+    el("other-form")?.addEventListener("submit", async e => {
+      e.preventDefault();
+      const r = recordBase("other");
+      r.name = el("other-name").value.trim();
+      r.tag = el("other-tag").value.trim();
+      r.value = Number(el("other-value").value);
+      r.accessories = el("other-accessories").value.trim();
+      if (await createRecord(r, el("other-submit"))) e.target.reset();
+    });
+
+    el("stand-form")?.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (state.editingStandId) {
+        const stand = state.records.find(r => r.__backendId === state.editingStandId);
+        if (stand) {
+          const updated = {
+            ...stand,
+            tag: el("stand-tag").value.trim(),
+            conservation: el("stand-conservation").value,
+            value: Number(el("stand-value").value)
+          };
+          if (await updateRecord(updated, el("stand-submit"))) resetStandForm();
+        }
+      } else {
+        const r=recordBase("stand"); r.tag=el("stand-tag").value.trim(); r.name="Estante"; r.conservation=el("stand-conservation").value; r.value=Number(el("stand-value").value); 
+        if (await createRecord(r,el("stand-submit"))) e.target.reset();
+      }
+    });
+
+    el("musician-form")?.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (state.editingMusicianId) {
+        const musician = state.records.find(r => r.__backendId === state.editingMusicianId);
+        if (musician) {
+          if (await updateRecord({ ...musician, name: el("musician-name").value.trim(), instrument: el("musician-instrument").value.trim(), naipe: el("musician-naipe").value }, el("musician-submit"))) resetMusicianForm();
+        }
+      } else {
+        const r=recordBase("musician"); r.name=el("musician-name").value.trim(); r.instrument=el("musician-instrument").value.trim(); r.naipe=el("musician-naipe").value; 
+        if (await createRecord(r,el("musician-submit"))) e.target.reset();
+      }
+    });
+
+    el("event-form")?.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (state.editingEventId) {
+        const eventRecord = state.records.find(r => r.__backendId === state.editingEventId);
+        if (eventRecord) await updateRecord({ ...eventRecord, event_title: el("event-title-input").value.trim(), event_date: el("event-date-input").value }, el("event-submit"));
+        resetEventForm();
+      } else {
+        const r = recordBase("event");
+        r.event_title = el("event-title-input").value.trim();
+        r.event_date = el("event-date-input").value;
+        const created = await createRecord(r, el("event-submit"));
+        if (created) resetEventForm();
+      }
+    });
+
+    // ==========================================
+    // EXECUÇÃO INICIAL
+    // ==========================================
+    checkExistingAuth();
+  </script>
+</body>
+</html>
