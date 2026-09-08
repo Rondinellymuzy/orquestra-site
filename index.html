@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestão de Orquestra</title>
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Fraunces:opsz,wght@9..144,600;9..144,700&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #17211c;
+      --forest: #173f32;
+      --moss: #2e6952;
+      --paper: #f7f4ec;
+      --cream: #fffdf8;
+      --brass: #c9913c;
+      --muted: #6d766f;
+      --line: #ded9cc;
+      --danger: #b63b3b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "DM Sans", sans-serif; color: var(--ink); background: #f7f4ec; }
+    .app-shell { width: 100%; min-height: 100vh; background: #f7f4ec; }
+    .serif { font-family: "Fraunces", serif; }
+    .nav-item { transition: .2s ease; cursor: pointer; }
+    .nav-item.active, .nav-item:hover { background: rgba(255,255,255,.18) !important; color: #fff !important; }
+    .view { display: none; }
+    .view.active { display: block; animation: rise .3s ease both; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .tab-button.active { background: var(--forest) !important; color: white !important; border-color: var(--forest) !important; }
+    .report-period.active { background: var(--forest) !important; color: white !important; border-color: var(--forest) !important; }
+    .metric-card { box-shadow: 0 12px 30px rgba(31, 49, 39, .06); }
+    .ring {
+      width: 110px; height: 110px; border-radius: 999px;
+      display: grid; place-items: center;
+      background: conic-gradient(var(--ring-color, var(--moss)) calc(var(--percent) * 1%), #ece7dc 0);
+      position: relative;
+    }
+    .ring::after { content: ""; position: absolute; inset: 13px; border-radius: 50%; background: var(--cream); }
+    .ring > span { position: relative; z-index: 1; font-weight: 700; font-size: 18px; }
+    .scrollbar-soft::-webkit-scrollbar { width: 7px; height: 7px; }
+    .scrollbar-soft::-webkit-scrollbar-thumb { background: #cbc4b4; border-radius: 99px; }
+    .toast { transform: translateY(20px); opacity: 0; pointer-events: none; transition: .25s ease; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .attendance-card.selected { background: #e0f1e6; border-color: #5ea376; }
+    .attendance-card.selected .presence-dot { background: #2e8b57; }
+    .modal-backdrop { display: none; }
+    .modal-backdrop.open { display: flex; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 900px) {
+      .sidebar { position: static; width: 100%; }
+      .layout-grid { grid-template-columns: 1fr !important; }
+      .mobile-scroll { overflow-x: auto; }
+    }
+    @media print {
+      body * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area { position: absolute; inset: 0; width: 100%; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TELA DE LOGIN -->
+  <div id="login-screen" class="fixed inset-0 z-[100] flex items-center justify-center bg-[#173f32] p-4">
+    <div class="w-full max-w-md rounded-2xl bg-[#fffdf8] p-8 shadow-2xl border border-[#ded9cc]">
+      <div class="flex items-center gap-3 justify-center mb-6">
+        <div class="w-12 h-12 rounded-full bg-[#c9913c] text-[#173f32] flex items-center justify-center font-bold text-2xl">
+          ♫
+        </div>
+        <div>
+          <p class="text-xs uppercase tracking-[.18em] text-[#6d766f] font-semibold">Orquestra</p>
+          <h2 class="serif font-bold text-lg text-[#173f32]">Pr. João Batista</h2>
+        </div>
+      </div>
+      <h3 class="text-xl font-bold text-center text-[#17211c] mb-1">Acesso Restrito</h3>
+      <p class="text-xs text-center text-[#6d766f] mb-6">Informe seu e-mail e senha cadastrados no Supabase.</p>
+      
+      <form id="login-form" class="space-y-4" onsubmit="handleLogin(event)">
+        <div>
+          <label for="login-email" class="block text-xs font-semibold text-[#17211c] mb-1">E-mail</label>
+          <input id="login-email" type="email" required autocomplete="username" placeholder="seu-email@exemplo.com" class="w-full rounded-xl border border-[#ded9cc] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#2e6952]">
+        </div>
+        <div>
+          <label for="login-password" class="block text-xs font-semibold text-[#17211c] mb-1">Senha</label>
+          <input id="login-password" type="password" required autocomplete="current-password" placeholder="••••••••" class="w-full rounded-xl border border-[#ded9cc] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#2e6952]">
+        </div>
+        <button id="login-submit" type="submit" class="w-full rounded-xl bg-[#c9913c] py-3 text-sm font-bold text-[#173f32] hover:opacity-90 transition shadow">
+          Entrar no Sistema
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- APLICAÇÃO PRINCIPAL -->
+  <div id="main-app" class="app-shell hidden">
+    <div class="layout-grid grid grid-cols-[260px_1fr] min-h-screen">
+      
+      <!-- SIDEBAR -->
+      <aside class="sidebar bg-[#173f32] text-white p-5 flex flex-col justify-between">
+        <div>
+          <header class="mb-8">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-[#c9913c] text-[#173f32] flex items-center justify-center font-bold text-lg">
+                ♫
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-[.18em] text-[#d9e4dc] font-semibold">Orquestra</p>
+                <h1 class="serif font-semibold leading-tight text-white text-base">Pr. João Batista</h1>
+              </div>
+            </div>
+          </header>
+
+          <nav aria-label="Navegação principal" class="space-y-2">
+            <button type="button" class="nav-item active w-full text-left rounded-xl px-4 py-3 flex items-center gap-3 bg-white/10" onclick="switchView('dashboard')">
+              <span class="text-lg">📊</span>
+              <span class="font-semibold text-sm">Visão Geral</span>
+            </button>
+            <button type="button" class="nav-item w-full text-left rounded-xl px-4 py-3 flex items-center gap-3" onclick="switchView('inventory')">
+              <span class="text-lg">📦</span>
+              <span class="font-semibold text-sm">Inventário</span>
+            </button>
+            <button type="button" class="nav-item w-full text-left rounded-xl px-4 py-3 flex items-center gap-3" onclick="switchView('attendance')">
+              <span class="text-lg">📅</span>
+              <span class="font-semibold text-sm">Frequência</span>
+            </button>
+          </nav>
+        </div>
+        
+        <div class="mt-8 space-y-3">
+          <div class="rounded-2xl p-4 bg-[#245341]">
+            <div class="flex items-center gap-2 mb-1">
+              <span id="status-indicator" class="inline-block w-2.5 h-2.5 rounded-full bg-green-400"></span>
+              <p id="status-text" class="font-semibold text-sm text-white">Conectado</p>
+            </div>
+            <p class="text-xs text-[#d5e2db] leading-relaxed">Supabase Database</p>
+          </div>
+          <button type="button" onclick="handleLogout()" class="w-full text-left rounded-xl px-4 py-2.5 flex items-center gap-3 text-red-300 hover:bg-red-900/30 hover:text-red-100 transition text-sm font-semibold">
+            <span>🚪</span> Sair do App
+          </button>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main class="w-full p-5 md:p-8 overflow-y-auto">
+        <!-- 1. DASHBOARD -->
+        <section id="dashboard" class="view active">
+          <header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-7">
+            <div>
+              <p class="text-xs uppercase tracking-[.18em] text-[#857f73] font-semibold">Visão Geral</p>
+              <h2 class="serif text-3xl md:text-4xl font-semibold mt-2 text-[#17211c]">O pulso da sua orquestra</h2>
+            </div>
+            <p class="text-sm text-[#6d766f]">Patrimônio, empréstimos e conservação em um só lugar.</p>
+          </header>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <article class="metric-card rounded-2xl bg-[#173f32] text-white p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#c8ddd1] font-semibold">Patrimônio consolidado</p>
+              <p id="total-value" class="text-3xl font-bold mt-4">R$ 0,00</p>
+              <div class="mt-5 flex items-center gap-2 text-sm text-[#dbeae1]">
+                <span id="total-items">0 itens cadastrados</span>
+              </div>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Instrumentos</p>
+              <p id="instrument-count" class="text-3xl font-bold mt-4">0</p>
+              <p id="instrument-value" class="text-sm text-[#6d766f] mt-3">R$ 0,00</p>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Pastas de naipe</p>
+              <p id="folder-count" class="text-3xl font-bold mt-4">0</p>
+              <p id="folder-value" class="text-sm text-[#6d766f] mt-3">R$ 0,00</p>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Estantes</p>
+              <p id="stand-count" class="text-3xl font-bold mt-4">0</p>
+              <p id="stand-average" class="text-sm text-[#6d766f] mt-3">Média: R$ 0,00</p>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Músicos cadastrados</p>
+              <p id="musician-count" class="text-3xl font-bold mt-4">0</p>
+              <p id="musician-distribution" class="text-sm text-[#6d766f] mt-3">Por naipe: —</p>
+            </article>
+            <article class="metric-card rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+              <p class="text-xs uppercase tracking-[.14em] text-[#6d766f] font-semibold">Frequência</p>
+              <div class="grid grid-cols-2 gap-3 mt-4">
+                <div>
+                  <p class="text-xs text-[#6d766f] font-semibold">Mês em curso</p>
+                  <p id="attendance-month-percent" class="text-2xl font-bold mt-1">0%</p>
+                  <p id="attendance-month-events" class="text-xs text-[#6d766f] mt-1">0 eventos</p>
+                </div>
+                <div>
+                  <p class="text-xs text-[#6d766f] font-semibold">Ano em curso</p>
+                  <p id="attendance-year-percent" class="text-2xl font-bold mt-1">0%</p>
+                  <p id="attendance-year-events" class="text-xs text-[#6d766f] mt-1">0 eventos</p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- 2. INVENTÁRIO -->
+        <section id="inventory" class="view">
+          <header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-7">
+            <div>
+              <p class="text-xs uppercase tracking-[.18em] text-[#857f73] font-semibold">Módulo 2</p>
+              <h2 class="serif text-3xl md:text-4xl font-semibold mt-2 text-[#17211c]">Inventário da orquestra</h2>
+            </div>
+          </header>
+          <div class="mobile-scroll flex gap-2 pb-2 border-b border-[#ded9cc]">
+            <button type="button" class="tab-button active rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('inventory-tabs', 'instruments-panel', this)">Instrumentos</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('inventory-tabs', 'scores-panel', this)">Partituras</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('inventory-tabs', 'stands-inventory-panel', this)">Estantes</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('inventory-tabs', 'others-panel', this)">Outros</button>
+          </div>
+          
+          <div id="instruments-panel" class="tab-panel active pt-6">
+            <div class="grid grid-cols-1 xl:grid-cols-[1fr_330px] gap-5">
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 class="serif text-xl font-semibold text-[#17211c]">Instrumentos cadastrados</h3>
+                    <p class="text-sm text-[#6d766f] mt-1">Acompanhe fotos, valores, responsáveis e conservação.</p>
+                  </div>
+                  <div class="flex flex-col sm:flex-row gap-2 min-w-[280px]">
+                    <div class="relative flex-1">
+                      <input id="instrument-search" type="search" oninput="renderInstruments()" class="w-full rounded-xl border border-[#d8d1c4] bg-white py-2.5 px-3 text-sm outline-none focus:ring-2 focus:ring-[#2e6952]" placeholder="Buscar instrumento...">
+                    </div>
+                    <div>
+                      <select id="instrument-naipe-filter" onchange="renderInstruments()" class="w-full rounded-xl border border-[#d8d1c4] bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#2e6952]">
+                        <option value="">Todos os naipes</option>
+                        <option>Cordas</option>
+                        <option>Madeiras</option>
+                        <option>Metais</option>
+                        <option>Base</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div class="overflow-x-auto mt-5 scrollbar-soft">
+                  <table class="w-full text-sm text-left">
+                    <thead class="text-xs uppercase tracking-wide text-[#6d766f] border-b border-[#ded9cc]">
+                      <tr>
+                        <th class="pb-3 pr-3">Instrumento / Valor</th>
+                        <th class="pb-3 pr-3">Naipe</th>
+                        <th class="pb-3 pr-3">Conservação</th>
+                        <th class="pb-3 pr-3">Status</th>
+                        <th class="pb-3 pr-3">Guardião</th>
+                        <th class="pb-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="instrument-list"></tbody>
+                  </table>
+                </div>
+                <p id="instrument-empty" class="hidden text-center py-8 text-sm text-[#6d766f]">Nenhum instrumento encontrado.</p>
+              </section>
+
+              <aside class="rounded-2xl bg-[#173f32] text-white p-5 h-fit">
+                <h3 id="instrument-form-title" class="serif text-xl font-semibold">Novo instrumento</h3>
+                <form id="instrument-form" class="mt-5 space-y-3">
+                  <div>
+                    <label for="instrument-tag" class="text-xs text-[#dce9e2] font-semibold">Tag de identificação</label>
+                    <input id="instrument-tag" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="text">
+                  </div>
+                  <div>
+                    <label for="instrument-name" class="text-xs text-[#dce9e2] font-semibold">Nome do instrumento</label>
+                    <input id="instrument-name" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="text">
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label for="instrument-naipe" class="text-xs text-[#dce9e2] font-semibold">Naipe</label>
+                      <select id="instrument-naipe" required class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                        <option value="">Selecione</option>
+                        <option>Cordas</option>
+                        <option>Madeiras</option>
+                        <option>Metais</option>
+                        <option>Base</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="instrument-value-input" class="text-xs text-[#dce9e2] font-semibold">Valor (R$)</label>
+                      <input id="instrument-value-input" required min="0" step="0.01" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="number">
+                    </div>
+                  </div>
+                  <div>
+                    <label for="instrument-photo" class="text-xs text-[#dce9e2] font-semibold">Link da foto (URL)</label>
+                    <input id="instrument-photo" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="url" placeholder="https://exemplo.com/foto.jpg">
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label for="instrument-status" class="text-xs text-[#dce9e2] font-semibold">Status</label>
+                      <select id="instrument-status" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                        <option>Disponível</option>
+                        <option>Emprestado</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="instrument-conservation" class="text-xs text-[#dce9e2] font-semibold">Conservação</label>
+                      <select id="instrument-conservation" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                        <option>Ótimo</option>
+                        <option>Bom</option>
+                        <option>Regular</option>
+                        <option>Necessita Reparo</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label for="instrument-guardian" class="text-xs text-[#dce9e2] font-semibold">Guardião / responsável</label>
+                    <select id="instrument-guardian" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]">
+                      <option value="">Sem guardião</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="instrument-loan-date" class="text-xs text-[#dce9e2] font-semibold">Data do empréstimo</label>
+                    <input id="instrument-loan-date" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="date">
+                  </div>
+                  <div>
+                    <label for="instrument-accessories" class="text-xs text-[#dce9e2] font-semibold">Acessórios</label>
+                    <input id="instrument-accessories" class="w-full mt-1 rounded-lg px-3 py-2 text-sm text-[#17211c]" type="text">
+                  </div>
+                  <button id="instrument-submit" class="w-full rounded-lg py-2.5 mt-2 font-bold bg-[#c9913c] text-[#173f32]" type="submit">Adicionar instrumento</button>
+                </form>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. FREQUÊNCIA -->
+        <section id="attendance" class="view">
+          <header class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-7">
+            <div>
+              <p class="text-xs uppercase tracking-[.18em] text-[#857f73] font-semibold">Módulo 3</p>
+              <h2 class="serif text-3xl md:text-4xl font-semibold mt-2 text-[#17211c]">Frequência e ensaios</h2>
+            </div>
+          </header>
+          <div class="mobile-scroll flex gap-2 pb-2 border-b border-[#ded9cc]">
+            <button type="button" class="tab-button active rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('attendance-tabs', 'call-panel', this)">Chamada</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('attendance-tabs', 'reports-panel', this)">Relatórios por Período</button>
+            <button type="button" class="tab-button rounded-full border border-[#ded9cc] px-4 py-2 text-sm font-semibold whitespace-nowrap" onclick="switchSubTab('attendance-tabs', 'musicians-panel', this)">Músicos</button>
+          </div>
+          
+          <div id="call-panel" class="tab-panel active pt-6">
+            <div class="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-5">
+              
+              <!-- PAINEL DE EVENTOS COM FILTROS E PAGINAÇÃO -->
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="serif text-xl font-semibold text-[#17211c]">Eventos</h3>
+                  <button type="button" onclick="el('event-form').classList.toggle('hidden')" class="rounded-lg bg-[#173f32] px-3 py-2 text-sm text-white font-semibold">Novo evento</button>
+                </div>
+
+                <!-- FILTROS DE PERÍODO PARA EVENTOS -->
+                <div class="space-y-2 mb-4 bg-[#f2eee4] p-3 rounded-xl">
+                  <p class="text-xs font-semibold text-[#17211c]">Filtrar período:</p>
+                  <div class="grid grid-cols-2 gap-2 text-xs">
+                    <button type="button" class="event-period-btn rounded-lg border border-[#ded9cc] bg-white py-1.5 font-semibold text-[#17211c] active" onclick="setEventPeriod('month', this)">Este Mês</button>
+                    <button type="button" class="event-period-btn rounded-lg border border-[#ded9cc] bg-white py-1.5 font-semibold text-[#17211c]" onclick="setEventPeriod('quarter', this)">Trimestre</button>
+                    <button type="button" class="event-period-btn rounded-lg border border-[#ded9cc] bg-white py-1.5 font-semibold text-[#17211c]" onclick="setEventPeriod('semester', this)">Semestre</button>
+                    <button type="button" class="event-period-btn rounded-lg border border-[#ded9cc] bg-white py-1.5 font-semibold text-[#17211c]" onclick="setEventPeriod('all', this)">Todos</button>
+                    <button type="button" class="event-period-btn col-span-2 rounded-lg border border-[#ded9cc] bg-white py-1.5 font-semibold text-[#17211c]" onclick="setEventPeriod('custom', this)">Personalizado</button>
+                  </div>
+                  <!-- Campos de data customizada -->
+                  <div id="custom-date-container" class="hidden grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#ded9cc]">
+                    <div>
+                      <label class="text-[10px] text-[#6d766f]">Início</label>
+                      <input id="event-start-custom" type="date" onchange="renderEvents()" class="w-full rounded border border-[#d8d1c4] bg-white px-2 py-1 text-xs">
+                    </div>
+                    <div>
+                      <label class="text-[10px] text-[#6d766f]">Fim</label>
+                      <input id="event-end-custom" type="date" onchange="renderEvents()" class="w-full rounded border border-[#d8d1c4] bg-white px-2 py-1 text-xs">
+                    </div>
+                  </div>
+                </div>
+
+                <form id="event-form" class="hidden mt-4 p-3 rounded-xl bg-[#f2eee4] space-y-3">
+                  <div>
+                    <label for="event-title-input" class="text-xs font-semibold text-[#17211c]">Título do evento</label>
+                    <input id="event-title-input" required class="w-full mt-1 rounded-lg border border-[#d8d1c4] px-3 py-2 text-sm" type="text">
+                  </div>
+                  <div>
+                    <label for="event-date-input" class="text-xs font-semibold text-[#17211c]">Data</label>
+                    <input id="event-date-input" required class="w-full mt-1 rounded-lg border border-[#d8d1c4] px-3 py-2 text-sm" type="date">
+                  </div>
+                  <div class="flex gap-2">
+                    <button type="submit" id="event-submit" class="flex-1 rounded-lg bg-[#2e6952] py-2 text-sm text-white font-semibold">Salvar</button>
+                    <button type="button" onclick="resetEventForm()" class="rounded-lg bg-white border border-[#d8d1c4] px-3 py-2 text-sm font-semibold text-[#17211c]">Cancelar</button>
+                  </div>
+                </form>
+
+                <div id="event-list" class="space-y-3 mt-4"></div>
+                <p id="event-empty" class="hidden text-center py-8 text-sm text-[#6d766f]">Nenhum evento encontrado.</p>
+
+                <!-- PAGINAÇÃO DE EVENTOS -->
+                <div class="flex items-center justify-between mt-4 pt-3 border-t border-[#ded9cc] text-xs">
+                  <div class="flex items-center gap-1">
+                    <span class="text-[#6d766f]">Itens/pág:</span>
+                    <select id="events-per-page" onchange="state.eventPage=1; renderEvents()" class="rounded border border-[#ded9cc] bg-white px-2 py-1 text-xs">
+                      <option value="5">5</option>
+                      <option value="10" selected>10</option>
+                      <option value="20">20</option>
+                    </select>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button type="button" onclick="changeEventPage(-1)" class="rounded border border-[#ded9cc] bg-white px-2.5 py-1 font-semibold hover:bg-gray-100">Anterior</button>
+                    <span id="event-page-info" class="text-[#6d766f]">Pág 1/1</span>
+                    <button type="button" onclick="changeEventPage(1)" class="rounded border border-[#ded9cc] bg-white px-2.5 py-1 font-semibold hover:bg-gray-100">Próxima</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="rounded-2xl bg-[#fffdf8] border border-[#ded9cc] p-5">
+                <div id="attendance-placeholder" class="py-16 text-center">
+                  <div class="text-3xl mb-2">📅</div>
+                  <h3 class="serif text-xl font-semibold mt-2 text-[#17211c]">Selecione um evento</h3>
+                  <p class="text-sm text-[#6d766f] mt-1">Escolha um evento na lista para iniciar a chamada.</p>
+                </div>
+                <div id="attendance-active" class="hidden">
+                  <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+                    <div>
+                      <p class="text-xs uppercase tracking-[.14em] text-[#6d766f]">Chamada em andamento</p>
+                      <h3 id="active-event-title" class="serif text-2xl font-semibold mt-1"></h3>
+                      <p id="active-event-date" class="text-sm text-[#6d766f] mt-1"></p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <div id="attendance-ring" class="ring" style="--percent:0; --ring-color:#2e6952;">
+                        <span id="attendance-percent">0%</span>
+                      </div>
+                      <div>
+                        <p id="attendance-present" class="font-bold">0 presentes</p>
+                        <p id="attendance-absent" class="text-sm text-[#6d766f]">0 ausentes</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="attendance-musicians" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-6"></div>
+                  <div class="flex justify-end mt-6">
+                    <button type="button" onclick="showDetails()" class="rounded-lg bg-[#173f32] px-4 py-2.5 text-sm font-semibold text-white">Ver detalhes do evento</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <!-- Outras abas (relatórios e músicos) -->
+          <div id="reports-panel" class="tab-panel pt-6">...</div>
+          <div id="musicians-panel" class="tab-panel pt-6">...</div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- SCRIPT API REST SUPABASE DIRETO -->
+  <script>
+    const SUPABASE_URL = "https://gwetuummkxempzththkp.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd3ZXR1dW1ta3hlbXB6dGh0aGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5ODE0MzksImV4cCI6MjEwMjU1NzQzOX0.VcxlWg9fu_aGEAJOqzJVb0LXvakXgK3bRyk3C6EQxok";
+
+    const state = {
+      records: [],
+      activeEventId: null,
+      reportDays: 30,
+      reportType: "complete",
+      pendingDeletes: new Set(),
+      editingEventId: null,
+      eventPage: 1,
+      eventPeriod: "month" // 'month', 'quarter', 'semester', 'all', 'custom'
+    };
+
+    const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+    const byType = type => (state.records || []).filter(r => r && r.type === type);
+    const clean = value => value || "";
+    const el = id => document.getElementById(id);
+
+    function toast(message) {
+      const node = el("toast");
+      if (node) {
+        node.textContent = message;
+        node.classList.add("show");
+        setTimeout(() => node.classList.remove("show"), 3500);
+      }
+    }
+
+    function setStatus(text, colorClass) {
+      const txt = el("status-text");
+      const ind = el("status-indicator");
+      if (txt) txt.textContent = text;
+      if (ind) ind.className = `inline-block w-2.5 h-2.5 rounded-full ${colorClass}`;
+    }
+
+    function fmtMoney(value) { return currency.format(Number(value || 0)); }
+    function fmtDate(value) {
+      if (!value) return "Sem data";
+      try {
+        const d = new Date(value + "T12:00:00");
+        return isNaN(d.getTime()) ? value : d.toLocaleDateString("pt-BR");
+      } catch (e) {
+        return value;
+      }
+    }
+
+    function badge(text, type) {
+      const color = type === "status"
+        ? (text === "Emprestado" ? "bg-[#fff0d6] text-[#8b5a13]" : "bg-[#dff0e5] text-[#17623a]")
+        : (text === "Necessita Reparo" ? "bg-[#f7dddd] text-[#9f3030]" : text === "Regular" ? "bg-[#fff0d6] text-[#8b5a13]" : "bg-[#e5f1ea] text-[#17623a]");
+      return `<span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${color}">${text || "—"}</span>`;
+    }
+
+    function recordBase(type) {
+      return { type, tag: "", name: "", naipe: "", conservation: "", status: "", guardian: "", loan_date: null, value: 0, accessories: "", foto_url: "", instrument: "", event_title: "", event_date: null, musician_id: "", present: false, scores: "", folder_naipe: "" };
+    }
+
+    function getAuthToken() { return localStorage.getItem("orquestra_auth_token") || SUPABASE_ANON_KEY; }
+    function getHeaders() {
+      const token = getAuthToken();
+      return { "apikey": SUPABASE_ANON_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=representation" };
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = el("login-email").value.trim();
+      const password = el("login-password").value;
+      const submitBtn = el("login-submit");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Verificando...";
+      try {
+        const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+          method: "POST", headers: { "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Entrar no Sistema";
+        if (!res.ok) { toast("Erro: " + (data.error_description || "E-mail ou senha incorretos.")); return; }
+        if (data.access_token) {
+          localStorage.setItem("orquestra_auth_token", data.access_token);
+          localStorage.setItem("orquestra_user_email", data.user?.email || email);
+          toast("Bem-vindo(a)!");
+          showMainApp();
+          await loadDataFromSupabase();
+        }
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Entrar no Sistema";
+        toast("Erro ao tentar autenticar.");
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem("orquestra_auth_token");
+      localStorage.removeItem("orquestra_user_email");
+      el("main-app").classList.add("hidden");
+      el("login-screen").classList.remove("hidden");
+      toast("Você saiu do sistema.");
+    }
+
+    function checkExistingAuth() {
+      if (localStorage.getItem("orquestra_auth_token")) { showMainApp(); loadDataFromSupabase(); }
+      else { el("login-screen").classList.remove("hidden"); el("main-app").classList.add("hidden"); }
+    }
+
+    function showMainApp() { el("login-screen").classList.add("hidden"); el("main-app").classList.remove("hidden"); renderAll(); }
+
+    function switchView(targetId) {
+      document.querySelectorAll(".nav-item").forEach(btn => btn.classList.remove("active", "bg-white/10"));
+      document.querySelector(`[onclick="switchView('${targetId}')"]`)?.classList.add("active", "bg-white/10");
+      document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+      el(targetId)?.classList.add("active");
+    }
+
+    function switchSubTab(groupName, targetPanelId, buttonElem) {
+      const parent = buttonElem.parentElement;
+      parent.querySelectorAll(".tab-button").forEach(b => b.classList.remove("active"));
+      buttonElem.classList.add("active");
+      parent.parentElement.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      el(targetPanelId)?.classList.add("active");
+    }
+
+    async function loadDataFromSupabase() {
+      setStatus("Sincronizando...", "bg-yellow-400");
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados?select=*&order=id.asc`, { headers: getHeaders() });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        state.records = (data || []).map(r => ({ ...r, __backendId: String(r.id), value: Number(r.value || 0) }));
+        setStatus("Conectado", "bg-green-400");
+        renderAll();
+      } catch (err) {
+        setStatus("Erro de Conexão", "bg-red-500");
+        toast("Erro ao carregar dados.");
+      }
+    }
+
+    async function createRecord(record, button) {
+      if (button) { button.disabled = true; button.dataset.origText = button.textContent; button.textContent = "Salvando..."; }
+      const payload = { ...record };
+      delete payload.__backendId; delete payload.id; delete payload.created_at;
+      if (!payload.loan_date) payload.loan_date = null;
+      if (!payload.event_date) payload.event_date = null;
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados`, {
+          method: "POST", headers: getHeaders(), body: JSON.stringify([payload])
+        });
+        if (button) { button.disabled = false; button.textContent = button.dataset.origText || "Salvar"; }
+        if (!res.ok) throw new Error(await res.text());
+        toast("Registro salvo!");
+        await loadDataFromSupabase();
+        return true;
+      } catch (err) {
+        if (button) { button.disabled = false; button.textContent = button.dataset.origText || "Salvar"; }
+        toast("Erro ao salvar: " + err.message);
+        return false;
+      }
+    }
+
+    async function updateRecord(record, button) {
+      if (button) { button.disabled = true; button.dataset.origText = button.textContent; button.textContent = "Salvando..."; }
+      const id = Number(record.id || record.__backendId);
+      const payload = { ...record };
+      delete payload.__backendId; delete payload.id; delete payload.created_at;
+      if (!payload.loan_date) payload.loan_date = null;
+      if (!payload.event_date) payload.event_date = null;
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados?id=eq.${id}`, {
+          method: "PATCH", headers: getHeaders(), body: JSON.stringify(payload)
+        });
+        if (button) { button.disabled = false; button.textContent = button.dataset.origText || "Salvar"; }
+        if (!res.ok) throw new Error(await res.text());
+        toast("Alterações salvas!");
+        await loadDataFromSupabase();
+        return true;
+      } catch (err) {
+        if (button) { button.disabled = false; button.textContent = button.dataset.origText || "Salvar"; }
+        toast("Erro ao atualizar: " + err.message);
+        return false;
+      }
+    }
+
+    async function deleteRecord(id) {
+      const record = state.records.find(r => r.__backendId === String(id));
+      if (!record) return;
+      if (!state.pendingDeletes.has(String(id))) {
+        state.pendingDeletes.add(String(id));
+        renderAll();
+        toast("Clique novamente em Excluir para confirmar.");
+        return;
+      }
+      state.pendingDeletes.delete(String(id));
+      let idsToDelete = [Number(id)];
+      if (record.type === "event") {
+        const related = attendanceFor(String(id)).map(a => Number(a.__backendId));
+        idsToDelete = [...idsToDelete, ...related];
+      }
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orquestra_dados?id=in.(${idsToDelete.join(",")})`, {
+          method: "DELETE", headers: getHeaders()
+        });
+        if (!res.ok) throw new Error(await res.text());
+        if (state.activeEventId === String(id)) state.activeEventId = null;
+        toast("Registro removido.");
+        await loadDataFromSupabase();
+      } catch (err) {
+        toast("Erro ao excluir: " + err.message);
+      }
+    }
+
+    async function togglePresence(musicianId) {
+      const eventId = state.activeEventId;
+      if (!eventId) return;
+      const existing = attendanceFor(eventId).find(a => String(a.musician_id) === String(musicianId));
+      if (existing) {
+        await updateRecord({ ...existing, present: !existing.present }, null);
+      } else {
+        const record = recordBase("attendance");
+        record.tag = String(eventId);
+        record.musician_id = String(musicianId);
+        record.present = true;
+        await createRecord(record, null);
+      }
+    }
+
+    // ==========================================
+    // CONTROLES DE PERÍODO E PAGINAÇÃO DE EVENTOS
+    // ==========================================
+    function setEventPeriod(period, btn) {
+      document.querySelectorAll(".event-period-btn").forEach(b => b.classList.remove("active", "bg-[#173f32]", "text-white"));
+      btn.classList.add("active", "bg-[#173f32]", "text-white");
+      state.eventPeriod = period;
+      state.eventPage = 1;
+      
+      const customContainer = el("custom-date-container");
+      if (customContainer) {
+        customContainer.classList.toggle("hidden", period !== "custom");
+      }
+      renderEvents();
+    }
+
+    function filterEventsByPeriod(events) {
+      const now = new Date();
+      return events.filter(ev => {
+        if (!ev.event_date) return false;
+        const d = new Date(ev.event_date + "T00:00:00");
+        if (isNaN(d.getTime())) return false;
+
+        if (state.eventPeriod === "month") {
+          return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        } else if (state.eventPeriod === "quarter") {
+          const diffTime = Math.abs(now - d);
+          const diffDays = diffTime / (1000 * 60 * 60 * 24);
+          return diffDays <= 90;
+        } else if (state.eventPeriod === "semester") {
+          const diffTime = Math.abs(now - d);
+          const diffDays = diffTime / (1000 * 60 * 60 * 24);
+          return diffDays <= 180;
+        } else if (state.eventPeriod === "custom") {
+          const start = el("event-start-custom")?.value;
+          const end = el("event-end-custom")?.value;
+          if (!start || !end) return true;
+          return ev.event_date >= start && ev.event_date <= end;
+        }
+        return true; // "all"
+      });
+    }
+
+    function changeEventPage(direction) {
+      state.eventPage += direction;
+      if (state.eventPage < 1) state.eventPage = 1;
+      renderEvents();
+    }
+
+    // ==========================================
+    // RENDERIZAÇÃO
+    // ==========================================
+    function dashboard() {
+      const instruments = byType("instrument");
+      const stands = byType("stand");
+      const folders = byType("folder");
+      const scores = byType("score");
+      const others = byType("other");
+
+      const instrumentValue = instruments.reduce((s, x) => s + Number(x.value || 0), 0);
+      const standValue = stands.reduce((s, x) => s + Number(x.value || 0), 0);
+      const total = instrumentValue + standValue;
+
+      if (el("total-value")) el("total-value").textContent = fmtMoney(total);
+      if (el("total-items")) el("total-items").textContent = `${instruments.length + stands.length + folders.length + others.length} itens cadastrados`;
+      if (el("instrument-count")) el("instrument-count").textContent = instruments.length;
+      if (el("instrument-value")) el("instrument-value").textContent = fmtMoney(instrumentValue);
+      if (el("folder-count")) el("folder-count").textContent = folders.length;
+      if (el("stand-count")) el("stand-count").textContent = stands.length;
+      if (el("musician-count")) el("musician-count").textContent = byType("musician").length;
+    }
+
+    function renderInstruments() {
+      const term = (el("instrument-search")?.value || "").toLowerCase().trim();
+      const naipeFilter = el("instrument-naipe-filter")?.value || "";
+      const data = byType("instrument").filter(item => [item.name, item.tag, item.guardian, item.naipe].join(" ").toLowerCase().includes(term) && (!naipeFilter || item.naipe === naipeFilter));
+      
+      if (el("instrument-list")) {
+        el("instrument-list").innerHTML = data.map(item => {
+          const photoHtml = item.foto_url 
+            ? `<a href="${item.foto_url}" target="_blank"><img src="${item.foto_url}" alt="Foto" class="w-10 h-10 rounded-lg object-cover border border-[#ded9cc] flex-shrink-0"></a>` 
+            : `<div class="w-10 h-10 rounded-lg bg-[#e4e0d6] text-[#857f73] flex items-center justify-center flex-shrink-0 border border-[#ded9cc] text-xs">📷</div>`;
+
+          return `<tr class="border-b border-[#eee9df]">
+            <td class="py-3 pr-3">
+              <div class="flex items-center gap-3">
+                ${photoHtml}
+                <div>
+                  <p class="font-semibold">${item.name || "—"}</p>
+                  <p class="text-xs text-[#6d766f]">${item.tag || ""} • <span class="font-bold text-[#173f32]">${fmtMoney(item.value)}</span></p>
+                </div>
+              </div>
+            </td>
+            <td class="py-3 pr-3">${item.naipe || "—"}</td>
+            <td class="py-3 pr-3">${badge(item.conservation,"conservation")}</td>
+            <td class="py-3 pr-3">${badge(item.status,"status")}</td>
+            <td class="py-3 pr-3"><p>${item.guardian || "—"}</p><p class="text-xs text-[#6d766f]">${item.loan_date ? fmtDate(item.loan_date) : ""}</p></td>
+            <td class="py-3 text-right">
+              <div class="flex justify-end gap-2">
+                <button type="button" class="edit-instrument text-xs font-semibold text-[#c9913c]" data-edit-instrument="${item.__backendId}">Editar</button>
+                <button type="button" class="delete-record text-xs font-semibold text-[#a43d3d]" data-delete="${item.__backendId}">${state.pendingDeletes.has(item.__backendId) ? "Confirmar?" : "Excluir"}</button>
+              </div>
+            </td>
+          </tr>`;
+        }).join("");
+      }
+      if (el("instrument-empty")) el("instrument-empty").classList.toggle("hidden", data.length > 0);
+    }
+
+    function attendanceFor(eventId) { return byType("attendance").filter(a => String(a.tag) === String(eventId)); }
+    function musiciansWithAttendance(eventId) {
+      const attendance = new Map(attendanceFor(eventId).map(a => [String(a.musician_id), a]));
+      return byType("musician").slice().sort((a, b) => (a.name || "").localeCompare(b.name || "", "pt-BR", { sensitivity: "base" }))
+        .map(m => ({ musician: m, attendance: attendance.get(String(m.__backendId)) }));
+    }
+    function attendanceMetrics(eventId) {
+      const rows = musiciansWithAttendance(eventId);
+      const present = rows.filter(r => r.attendance && r.attendance.present).length;
+      return { total: rows.length, present, absent: rows.length-present, percent: rows.length ? Math.round(present/rows.length*100) : 0 };
+    }
+
+    function renderEvents() {
+      const allEvents = byType("event").sort((a,b) => (b.event_date || "").localeCompare(a.event_date || ""));
+      const filteredEvents = filterEventsByPeriod(allEvents);
+      
+      const pageSize = Number(el("events-per-page")?.value || 10);
+      const totalPages = Math.ceil(filteredEvents.length / pageSize) || 1;
+      if (state.eventPage > totalPages) state.eventPage = totalPages;
+      
+      const startIdx = (state.eventPage - 1) * pageSize;
+      const paginatedEvents = filteredEvents.slice(startIdx, startIdx + pageSize);
+
+      if (el("event-page-info")) {
+        el("event-page-info").textContent = `Pág ${state.eventPage}/${totalPages}`;
+      }
+
+      if (el("event-list")) {
+        el("event-list").innerHTML = paginatedEvents.map(ev => {
+          const m = attendanceMetrics(ev.__backendId);
+          return `<div class="w-full rounded-xl border ${state.activeEventId === ev.__backendId ? "border-[#2e6952] bg-[#e6f1eb]" : "border-[#e1dbcf] bg-white"} p-4 hover:border-[#2e6952]" data-event="${ev.__backendId}">
+            <button type="button" class="w-full text-left" data-event-select="${ev.__backendId}"><div class="flex justify-between gap-2"><div><p class="font-semibold">${ev.event_title || "Sem título"}</p><p class="text-xs text-[#6d766f] mt-1">${fmtDate(ev.event_date)}</p></div><span class="text-xs text-[#6d766f]">${m.percent}%</span></div>
+            <p class="text-xs text-[#6d766f] mt-3">${m.present} presentes · ${m.absent} ausentes</p><div class="h-1.5 bg-[#e4e0d6] rounded-full mt-2 overflow-hidden"><div class="h-full bg-[#2e6952]" style="width:${m.percent}%"></div></div></button>
+            <div class="flex gap-3 mt-3 pt-3 border-t border-[#e6e0d5]"><button type="button" class="edit-event text-xs font-semibold text-[#c9913c]" data-edit-event="${ev.__backendId}">Editar</button><button type="button" class="delete-record text-xs font-semibold text-[#a43d3d]" data-delete="${ev.__backendId}">${state.pendingDeletes.has(ev.__backendId) ? "Confirmar?" : "Excluir"}</button></div>
+          </div>`;
+        }).join("");
+      }
+      if (el("event-empty")) el("event-empty").classList.toggle("hidden", filteredEvents.length > 0);
+      renderAttendanceWorkspace();
+    }
+
+    function renderAttendanceWorkspace() {
+      const event = byType("event").find(e => e.__backendId === state.activeEventId);
+      if (el("attendance-placeholder")) el("attendance-placeholder").classList.toggle("hidden", !!event);
+      if (el("attendance-active")) el("attendance-active").classList.toggle("hidden", !event);
+      if (!event) return;
+      const m = attendanceMetrics(event.__backendId);
+      if (el("active-event-title")) el("active-event-title").textContent = event.event_title;
+      if (el("active-event-date")) el("active-event-date").textContent = fmtDate(event.event_date);
+      if (el("attendance-percent")) el("attendance-percent").textContent = m.percent + "%";
+      if (el("attendance-ring")) el("attendance-ring").style.setProperty("--percent", m.percent);
+      if (el("attendance-present")) el("attendance-present").textContent = m.present + " presentes";
+      if (el("attendance-absent")) el("attendance-absent").textContent = m.absent + " ausentes";
+      if (el("attendance-musicians")) {
+        el("attendance-musicians").innerHTML = musiciansWithAttendance(event.__backendId).map(row => {
+          const present = row.attendance ? row.attendance.present : false;
+          return `<button type="button" class="attendance-card ${present ? "selected" : ""} flex items-center gap-3 rounded-xl border border-[#ded9cc] p-3 text-left transition" data-toggle-presence="${row.musician.__backendId}">
+            <span class="presence-dot h-3 w-3 rounded-full bg-[#d8d1c4]"></span><span><span class="block font-semibold text-sm">${row.musician.name}</span><span class="block text-xs text-[#6d766f]">${row.musician.instrument} · ${row.musician.naipe}</span></span>
+          </button>`;
+        }).join("");
+      }
+    }
+
+    function renderAll() {
+      dashboard(); renderInstruments(); renderEvents();
+      if (window.lucide && window.lucide.createIcons) lucide.createIcons();
+    }
+
+    function resetEventForm() {
+      state.editingEventId = null;
+      el("event-form")?.reset();
+      if (el("event-submit")) el("event-submit").textContent = "Salvar";
+      el("event-form")?.classList.add("hidden");
+    }
+
+    // ==========================================
+    // LISTENERS DE CLIQUE
+    // ==========================================
+    document.addEventListener("click", async event => {
+      const targetEvent = event.target.closest("[data-event-select]");
+      if (targetEvent) { state.activeEventId = targetEvent.dataset.eventSelect; renderEvents(); }
+
+      const editEventBtn = event.target.closest("[data-edit-event]");
+      if (editEventBtn) {
+        const eventRecord = state.records.find(r => r.__backendId === editEventBtn.dataset.editEvent);
+        if (eventRecord) {
+          state.editingEventId = eventRecord.__backendId;
+          el("event-title-input").value = eventRecord.event_title || "";
+          el("event-date-input").value = eventRecord.event_date || "";
+          el("event-form")?.classList.remove("hidden");
+          if (el("event-submit")) el("event-submit").textContent = "Salvar alterações";
+        }
+      }
+
+      const toggle = event.target.closest("[data-toggle-presence]");
+      if (toggle) await togglePresence(toggle.dataset.togglePresence);
+
+      const remove = event.target.closest("[data-delete]");
+      if (remove) await deleteRecord(remove.dataset.delete);
+    });
+
+    el("event-form")?.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (state.editingEventId) {
+        const eventRecord = state.records.find(r => r.__backendId === state.editingEventId);
+        if (eventRecord) await updateRecord({ ...eventRecord, event_title: el("event-title-input").value.trim(), event_date: el("event-date-input").value }, el("event-submit"));
+        resetEventForm();
+      } else {
+        const r = recordBase("event");
+        r.event_title = el("event-title-input").value.trim();
+        r.event_date = el("event-date-input").value;
+        const created = await createRecord(r, el("event-submit"));
+        if (created) resetEventForm();
+      }
+    });
+
+    checkExistingAuth();
+  </script>
+</body>
+</html>
